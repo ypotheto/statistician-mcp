@@ -3,6 +3,37 @@
 All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); versioning is semver.
 
+## Unreleased — OAuth resource server (Kinde)
+
+- **`STATMCP_AUTH_MODE=oauth`**: a third auth mode alongside `token`/`keys`, for
+  clients (Claude's custom connectors) that speak OAuth rather than a static
+  bearer token. This server only ever plays the OAuth *resource server* role —
+  an external IdP (Kinde) is the authorization server, so there's no hand-rolled
+  `/authorize`/`/token`/PKCE/Dynamic-Client-Registration to get wrong. Just:
+  - `OAuthVerifier` (`oauth.py`): validates a Kinde-issued JWT (`PyJWT` +
+    `PyJWKClient` against the issuer's JWKS) — signature, issuer, audience,
+    expiry — then checks a `permissions` claim for a required entitlement key
+    (`STATMCP_OAUTH_REQUIRED_PERMISSION`, default `access:statistician-mcp`).
+    That claim is the actual access gate: assigned manually per-user in Kinde
+    today, swappable later for Kinde Billing/Stripe-driven entitlements with
+    zero code changes here, since this only ever checks "is the claim present."
+  - Each distinct user gets their own workspace, derived from the token's
+    `sub` claim via the same `resolve_workspace_id` hash the `token` mode
+    already used for its one shared workspace — no new mapping table needed.
+  - `GET /.well-known/oauth-protected-resource` (RFC 9728) and a
+    `WWW-Authenticate` header on 401s in oauth mode, so a client can discover
+    where to authenticate.
+- `tests/test_oauth.py`: contract tests for `OAuthVerifier` using real RS256
+  signing/verification (a generated keypair), not a mock — issuer/audience/
+  expiry/permission/signature-tampering rejection paths all covered.
+  `tests/test_http.py` adds end-to-end coverage through `AuthMiddleware`
+  (metadata endpoint, `WWW-Authenticate` header, a full MCP handshake with a
+  valid token, rejection of a token missing the required permission).
+- Fixed a related bug the metadata-endpoint test caught immediately:
+  `/.well-known/oauth-protected-resource` was being gated by `AuthMiddleware`
+  like every other route, which is backwards — a client has to be able to
+  fetch it *before* it has any token, to find out where to log in.
+
 ## v0.2.2 — Phase 7a (DO Spaces + Postgres key store)
 
 Per the plan's Phase 7 acceptance criteria, `v0.3.0` stays reserved for hosted

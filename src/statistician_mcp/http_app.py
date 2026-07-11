@@ -11,6 +11,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from statistician_mcp import __version__, apikeys
 from statistician_mcp.config import Settings
+from statistician_mcp.oauth import OAuthVerifier
 from statistician_mcp.server import ServerBundle
 from statistician_mcp.workspace import (
     get_current_workspace_id,
@@ -32,16 +33,34 @@ class AuthMiddleware:
     block the event loop; it runs off-thread via `anyio.to_thread.run_sync` even
     for the SQLite store, which doesn't strictly need it but isn't hurt by it.
 
-    `/healthz` is always public. `/artifacts/*` also accepts the token as a `?t=`
-    query parameter since browsers can't set an Authorization header on a plain link.
+    `/healthz` and `/.well-known/oauth-protected-resource` are always public --
+    the latter has to be, since a client fetches it *before* it has any token,
+    to discover where to authenticate in the first place. `/artifacts/*` also
+    accepts the token as a `?t=` query parameter since browsers can't set an
+    Authorization header on a plain link.
     """
 
-    def __init__(self, app: ASGIApp, verify_token: TokenVerifier | None) -> None:
+    _PUBLIC_PATHS = frozenset({"/healthz", "/.well-known/oauth-protected-resource"})
+
+    def __init__(
+        self,
+        app: ASGIApp,
+        verify_token: TokenVerifier | None,
+        unauthorized_headers: dict[str, str] | None = None,
+    ) -> None:
         self._app = app
         self._verify_token = verify_token
+        # Set only in oauth mode: points a client at the Protected Resource
+        # Metadata endpoint per the MCP authorization spec, so it can discover
+        # where to authenticate rather than just seeing an opaque 401.
+        self._unauthorized_headers = unauthorized_headers or {}
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or self._verify_token is None or scope["path"] == "/healthz":
+        if (
+            scope["type"] != "http"
+            or self._verify_token is None
+            or scope["path"] in self._PUBLIC_PATHS
+        ):
             await self._app(scope, receive, send)
             return
 
@@ -55,6 +74,7 @@ class AuthMiddleware:
             response = JSONResponse(
                 {"error": {"code": "unauthorized", "message": "missing or invalid bearer token"}},
                 status_code=401,
+                headers=self._unauthorized_headers,
             )
             await response(scope, receive, send)
             return
@@ -98,6 +118,19 @@ def _extract_bearer_token(header_value: str | None) -> str | None:
 
 
 def _build_token_verifier(settings: Settings) -> TokenVerifier | None:
+    if settings.auth_mode == "oauth":
+        if not (settings.oauth_issuer and settings.oauth_audience):
+            raise ValueError(
+                "STATMCP_AUTH_MODE=oauth requires STATMCP_OAUTH_ISSUER and "
+                "STATMCP_OAUTH_AUDIENCE to both be set"
+            )
+        verifier = OAuthVerifier(
+            issuer=settings.oauth_issuer,
+            audience=settings.oauth_audience,
+            required_permission=settings.oauth_required_permission,
+        )
+        return lambda token: anyio.to_thread.run_sync(verifier.verify, token)
+
     if settings.auth_mode == "keys":
         key_store = apikeys.build_key_store(settings)
         return lambda token: anyio.to_thread.run_sync(key_store.verify_key, token)
@@ -115,12 +148,31 @@ def _build_token_verifier(settings: Settings) -> TokenVerifier | None:
     return None
 
 
+def _protected_resource_metadata_url(settings: Settings) -> str:
+    base_url = settings.public_base_url or f"http://localhost:{settings.port}"
+    return f"{base_url.rstrip('/')}/.well-known/oauth-protected-resource"
+
+
 def create_app(bundle: ServerBundle) -> ASGIApp:
     mcp = bundle.mcp
+    settings = bundle.settings
 
     @mcp.custom_route("/healthz", methods=["GET"])
     async def healthz(_request: Request) -> JSONResponse:
         return JSONResponse({"status": "ok", "version": __version__})
+
+    if settings.auth_mode == "oauth":
+
+        @mcp.custom_route("/.well-known/oauth-protected-resource", methods=["GET"])
+        async def protected_resource_metadata(_request: Request) -> JSONResponse:
+            # RFC 9728 Protected Resource Metadata: tells an MCP client where the
+            # authorization server (Kinde) is, so it knows where to log in.
+            return JSONResponse(
+                {
+                    "resource": settings.oauth_audience,
+                    "authorization_servers": [settings.oauth_issuer],
+                }
+            )
 
     @mcp.custom_route("/artifacts/{workspace_id}/{artifact_id}/{filename}", methods=["GET"])
     async def get_artifact(request: Request) -> Response:
@@ -145,7 +197,18 @@ def create_app(bundle: ServerBundle) -> ASGIApp:
         media_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
         return Response(content=data, media_type=media_type)
 
+    unauthorized_headers = {}
+    if settings.auth_mode == "oauth":
+        resource_metadata_url = _protected_resource_metadata_url(settings)
+        unauthorized_headers["WWW-Authenticate"] = (
+            f'Bearer resource_metadata="{resource_metadata_url}"'
+        )
+
     app: ASGIApp = mcp.streamable_http_app()
-    app = AuthMiddleware(app, verify_token=_build_token_verifier(bundle.settings))
-    app = TimeoutMiddleware(app, timeout_seconds=bundle.settings.request_timeout_seconds)
+    app = AuthMiddleware(
+        app,
+        verify_token=_build_token_verifier(settings),
+        unauthorized_headers=unauthorized_headers,
+    )
+    app = TimeoutMiddleware(app, timeout_seconds=settings.request_timeout_seconds)
     return app

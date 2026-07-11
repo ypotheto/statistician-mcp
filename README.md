@@ -102,14 +102,12 @@ protocol version `2025-03-26`).
   official dev tool, gives you a UI to call `tools/list`/`tools/call` without a
   full chat client: `npx @modelcontextprotocol/inspector .\.venv\Scripts\python.exe -m statistician_mcp --transport stdio`
   (or point it at the HTTP transport instead).
-- **ChatGPT** — not covered here. ChatGPT is a cloud-hosted client and can't spawn
-  a local stdio subprocess the way Claude Desktop can; it needs a reachable HTTPS
-  URL (e.g. via ngrok/Cloudflare Tunnel) added as a custom connector, and exact
-  connector requirements (OAuth, allow-listing) are outside what's verified here.
+- **ChatGPT** — connects over the HTTP transport as a custom connector; needs a
+  reachable HTTPS URL and a bearer token (`keys` mode below).
 
 ## Authentication
 
-Two modes, set via `STATMCP_AUTH_MODE` (default `token`):
+Three modes, set via `STATMCP_AUTH_MODE` (default `token`):
 
 - **`token`** — a single static bearer token via `STATMCP_API_TOKEN`. Empty/unset
   disables auth entirely (dev only — this is what stdio/local testing above uses).
@@ -130,8 +128,32 @@ Two modes, set via `STATMCP_AUTH_MODE` (default `token`):
 
   The raw key is shown only once, at issuance — only its hash is stored.
 
-`/healthz` is always public. `/artifacts/*` also accepts the token as a `?t=`
-query parameter (browsers can't set an `Authorization` header on a plain link).
+- **`oauth`** — for clients (like Claude's custom connectors) that speak OAuth
+  rather than a static bearer token. This server only ever plays the OAuth
+  *resource server* role — an external identity provider (Kinde, or any OIDC
+  provider) is the authorization server; there's no `/authorize` or `/token`
+  endpoint here, just JWT validation. Requires:
+
+  ```
+  STATMCP_OAUTH_ISSUER=https://<your-tenant>.kinde.com
+  STATMCP_OAUTH_AUDIENCE=https://<this-server>/mcp
+  STATMCP_OAUTH_REQUIRED_PERMISSION=access:statistician-mcp   # optional, this is already the default
+  ```
+
+  A token must be signed by the issuer, carry the exact `aud` above, and
+  include `STATMCP_OAUTH_REQUIRED_PERMISSION` in its `permissions` claim —
+  this last check is the actual access gate (assigned per-user in the
+  provider's dashboard today; swappable later for automatic
+  subscription-driven entitlements without any code change here). Each
+  distinct authenticated user gets their own workspace, derived from the
+  token's `sub` claim the same way the `token` mode derives one from the
+  static token. `GET /.well-known/oauth-protected-resource` (RFC 9728) tells
+  a client where to authenticate; a 401 in this mode carries a
+  `WWW-Authenticate` header pointing at it.
+
+`/healthz` and `/.well-known/oauth-protected-resource` are always public.
+`/artifacts/*` also accepts the token as a `?t=` query parameter (browsers
+can't set an `Authorization` header on a plain link).
 
 ## Docker
 

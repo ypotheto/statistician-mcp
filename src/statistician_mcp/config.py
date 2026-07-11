@@ -32,6 +32,14 @@ class Settings(BaseSettings):
     # to switch to PostgresKeyStore instead.
     database_url: str | None = None
 
+    # OAuth (STATMCP_AUTH_MODE=oauth) -- Kinde (or any OIDC provider) as the
+    # authorization server; this app only ever plays the resource-server role.
+    # oauth_issuer is the provider's base URL (e.g. https://<subdomain>.kinde.com);
+    # oauth_audience must match the API's registered Audience in Kinde exactly.
+    oauth_issuer: str | None = None
+    oauth_audience: str | None = None
+    oauth_required_permission: str = "access:statistician-mcp"
+
 
 def get_settings() -> Settings:
     return Settings()

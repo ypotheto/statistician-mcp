@@ -36,7 +36,7 @@ Add to your MCP client config (e.g. `claude_desktop_config.json`):
 
 ```bash
 curl http://localhost:8347/healthz
-# {"status":"ok","version":"0.2.1"}
+# {"status":"ok","version":"0.2.2"}
 ```
 
 The MCP endpoint is served at `POST http://localhost:8347/mcp` (streamable HTTP,
@@ -120,3 +120,33 @@ scoped to just that bucket via `doctl spaces keys create <name> --grants
 setting — one config switch for the key table, one for dataset/artifact
 storage; a deployment can mix and match (e.g. Postgres keys + local-disk
 storage on a Droplet, or Postgres keys + Spaces storage for App Platform).
+
+## Deployment
+
+Two viable paths on DigitalOcean — pick based on how much ops you want:
+
+- **App Platform** (this repo's spec: [`.do/app.yaml`](.do/app.yaml)) — deploys
+  the Dockerfile directly from this GitHub repo, managed TLS, no server to
+  patch. Requires `STATMCP_DATABASE_URL` and the `STATMCP_SPACES_*` vars set
+  (App Platform's disk is ephemeral, so local SQLite/local-dir storage don't
+  survive a redeploy). Set each `STATMCP_*` secret as an encrypted app-level
+  env var — never commit real values into `.do/app.yaml`, which only holds
+  placeholders. Pick a region that co-locates with wherever your Postgres
+  cluster and Spaces bucket actually live, to keep the per-request key lookup
+  and dataset/artifact I/O both low-latency.
+- **Droplet + Docker** — a small droplet with a mounted volume keeps the
+  local-dir storage backend and SQLite key store working unchanged, at the
+  cost of your own reverse proxy (Caddy/nginx + Let's Encrypt) for TLS and OS
+  upkeep. Fine for a private beta; App Platform is the better path once
+  external customers exist.
+
+Either way: set `STATMCP_PUBLIC_BASE_URL` to the real public HTTPS URL once
+it's known (artifact links resolve against this — App Platform has no
+bindable variable for an app's own URL, so this has to be set as a second step
+after the first deploy, once DO tells you the assigned domain) and smoke-test
+`/healthz` plus an actual tool call against the hosted instance before
+declaring it done.
+
+See [CHANGELOG.md](CHANGELOG.md) for what's been verified against real DO
+infrastructure so far, and [planning/statistician_mcp_plan.md](planning/statistician_mcp_plan.md)
+for the deployment phase's acceptance criteria.

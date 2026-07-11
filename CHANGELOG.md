@@ -3,7 +3,14 @@
 All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); versioning is semver.
 
-## Unreleased — Phase 7a (DO Spaces + Postgres key store)
+## v0.2.2 — Phase 7a (DO Spaces + Postgres key store)
+
+Per the plan's Phase 7 acceptance criteria, `v0.3.0` stays reserved for hosted
+`/healthz` green plus a ypotheto-core round trip against the live deployment —
+neither is confirmed yet (the DO App Platform app exists but its first deploy
+hasn't succeeded). This release is everything short of that: both backends
+built and verified live against real DO infrastructure (Postgres cluster,
+Spaces bucket), just not yet wired up end-to-end through a running deployment.
 
 - **`SpacesBackend`** (`storage.py`): a DigitalOcean Spaces (S3-compatible, via
   `boto3`) implementation of `StorageBackend`, selected by setting

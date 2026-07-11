@@ -17,7 +17,7 @@ from statistician_mcp.modules.msa import register_msa_tools
 from statistician_mcp.modules.power import register_power_tools
 from statistician_mcp.modules.regression import register_regression_tools
 from statistician_mcp.modules.spc import register_spc_tools
-from statistician_mcp.storage import LocalDirBackend
+from statistician_mcp.storage import LocalDirBackend, SpacesBackend, StorageBackend
 
 
 @dataclass
@@ -28,9 +28,27 @@ class ServerBundle:
     artifact_store: ArtifactStore
 
 
+def _build_storage_backend(settings: Settings) -> StorageBackend:
+    if settings.spaces_bucket is None:
+        return LocalDirBackend(settings.data_dir / "storage")
+    if not (settings.spaces_endpoint and settings.spaces_key and settings.spaces_secret):
+        raise ValueError(
+            "STATMCP_SPACES_BUCKET is set, so STATMCP_SPACES_ENDPOINT, "
+            "STATMCP_SPACES_KEY, and STATMCP_SPACES_SECRET must be set too"
+        )
+    return SpacesBackend(
+        bucket=settings.spaces_bucket,
+        endpoint_url=settings.spaces_endpoint,
+        access_key=settings.spaces_key,
+        secret_key=settings.spaces_secret,
+        region=settings.spaces_region,
+        prefix=settings.spaces_prefix,
+    )
+
+
 def create_server(settings: Settings) -> ServerBundle:
     usage.configure(settings.data_dir)
-    backend = LocalDirBackend(settings.data_dir / "storage")
+    backend = _build_storage_backend(settings)
     dataset_store = DatasetStore(backend)
     base_url = settings.public_base_url or f"http://localhost:{settings.port}"
     artifact_store = ArtifactStore(backend, base_url)

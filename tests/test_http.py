@@ -124,8 +124,9 @@ async def test_keys_mode_rejects_missing_and_unknown_keys(settings_with_keys: Se
 
 @pytest.mark.asyncio
 async def test_keys_mode_accepts_an_issued_key(settings_with_keys: Settings) -> None:
-    db_path = settings_with_keys.data_dir / "keys.db"
-    raw_key = apikeys.issue_key(db_path, workspace_id="ws_acme", plan="pro")
+    raw_key = apikeys.build_key_store(settings_with_keys).issue_key(
+        workspace_id="ws_acme", plan="pro"
+    )
     bundle = create_server(settings_with_keys)
     app = create_app(bundle)
 
@@ -168,9 +169,9 @@ async def test_keys_mode_accepts_an_issued_key(settings_with_keys: Settings) -> 
 async def test_keys_mode_isolates_artifacts_between_two_tenants(
     settings_with_keys: Settings,
 ) -> None:
-    db_path = settings_with_keys.data_dir / "keys.db"
-    key_a = apikeys.issue_key(db_path, workspace_id="ws_a")
-    key_b = apikeys.issue_key(db_path, workspace_id="ws_b")
+    key_store = apikeys.build_key_store(settings_with_keys)
+    key_a = key_store.issue_key(workspace_id="ws_a")
+    key_b = key_store.issue_key(workspace_id="ws_b")
 
     bundle = create_server(settings_with_keys)
     record = bundle.artifact_store.register(
@@ -191,9 +192,9 @@ async def test_keys_mode_isolates_artifacts_between_two_tenants(
 
 @pytest.mark.asyncio
 async def test_keys_mode_rejects_a_disabled_key(settings_with_keys: Settings) -> None:
-    db_path = settings_with_keys.data_dir / "keys.db"
-    raw_key = apikeys.issue_key(db_path, workspace_id="ws_acme")
-    apikeys.disable_key(db_path, raw_key)
+    key_store = apikeys.build_key_store(settings_with_keys)
+    raw_key = key_store.issue_key(workspace_id="ws_acme")
+    key_store.disable_key(raw_key)
     app = create_app(create_server(settings_with_keys))
 
     transport = ASGITransport(app=app)

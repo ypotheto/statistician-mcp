@@ -6,6 +6,10 @@ Usage:
     python scripts/issue_key.py disable <raw_key> [--db PATH]
     python scripts/issue_key.py list [--db PATH]
 
+Targets the same key store the server would use: Postgres if STATMCP_DATABASE_URL
+is set, else the SQLite file at {STATMCP_DATA_DIR}/keys.db. `--db PATH` overrides
+that and always forces SQLite at the given path, ignoring STATMCP_DATABASE_URL.
+
 The raw key is only ever printed at issuance time — only its hash is stored, so
 there is no way to recover a lost key; issue a new one and disable the old one.
 """
@@ -15,12 +19,14 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from statistician_mcp import apikeys
+from statistician_mcp.apikeys import KeyStore, SqliteKeyStore, build_key_store
 from statistician_mcp.config import get_settings
 
 
-def _default_db_path() -> Path:
-    return get_settings().data_dir / "keys.db"
+def _resolve_key_store(db_override: Path | None) -> KeyStore:
+    if db_override is not None:
+        return SqliteKeyStore(db_override)
+    return build_key_store(get_settings())
 
 
 def main() -> None:
@@ -40,20 +46,20 @@ def main() -> None:
     listing.add_argument("--db", type=Path, default=None)
 
     args = parser.parse_args()
-    db_path = args.db or _default_db_path()
+    key_store = _resolve_key_store(args.db)
 
     if args.command == "issue":
-        raw_key = apikeys.issue_key(db_path, args.workspace_id, args.plan)
+        raw_key = key_store.issue_key(args.workspace_id, args.plan)
         print(f"Issued key for workspace '{args.workspace_id}' (plan={args.plan}):")
         print(raw_key)
         print("\nThis is the only time the raw key is shown — store it securely now.")
     elif args.command == "disable":
-        if apikeys.disable_key(db_path, args.raw_key):
+        if key_store.disable_key(args.raw_key):
             print("Key disabled.")
         else:
             print("No matching (enabled) key found.")
     elif args.command == "list":
-        for entry in apikeys.list_keys(db_path):
+        for entry in key_store.list_keys():
             status = "disabled" if entry["disabled"] else "active"
             print(
                 f"{entry['key_hash_prefix']}...  workspace={entry['workspace_id']}  "

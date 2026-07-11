@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hmac
 import mimetypes
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
 import anyio
 from starlette.requests import Request
@@ -19,15 +19,18 @@ from statistician_mcp.workspace import (
     set_current_workspace_id,
 )
 
-TokenVerifier = Callable[[str], "str | None"]
+TokenVerifier = Callable[[str], Awaitable["str | None"]]
 
 
 class AuthMiddleware:
     """Plain ASGI middleware (not `BaseHTTPMiddleware`, which breaks streaming
-    responses) resolving a bearer token to a workspace id via a pluggable
+    responses) resolving a bearer token to a workspace id via a pluggable, async
     `verify_token` callable — this is what lets STATMCP_AUTH_MODE=token (a single
     static shared token, hashed into one workspace) and STATMCP_AUTH_MODE=keys (a
-    real per-tenant SQLite key table) share one code path.
+    real per-tenant key table, SQLite or Postgres) share one code path. The
+    verifier is async so a Postgres-backed lookup's network round trip doesn't
+    block the event loop; it runs off-thread via `anyio.to_thread.run_sync` even
+    for the SQLite store, which doesn't strictly need it but isn't hurt by it.
 
     `/healthz` is always public. `/artifacts/*` also accepts the token as a `?t=`
     query parameter since browsers can't set an Authorization header on a plain link.
@@ -47,7 +50,7 @@ class AuthMiddleware:
         if supplied is None and scope["path"].startswith("/artifacts/"):
             supplied = request.query_params.get("t")
 
-        workspace_id = self._verify_token(supplied) if supplied is not None else None
+        workspace_id = await self._verify_token(supplied) if supplied is not None else None
         if workspace_id is None:
             response = JSONResponse(
                 {"error": {"code": "unauthorized", "message": "missing or invalid bearer token"}},
@@ -96,13 +99,13 @@ def _extract_bearer_token(header_value: str | None) -> str | None:
 
 def _build_token_verifier(settings: Settings) -> TokenVerifier | None:
     if settings.auth_mode == "keys":
-        db_path = settings.data_dir / "keys.db"
-        return lambda token: apikeys.verify_key(db_path, token)
+        key_store = apikeys.build_key_store(settings)
+        return lambda token: anyio.to_thread.run_sync(key_store.verify_key, token)
 
     if settings.api_token:
         static_token = settings.api_token
 
-        def verify_static_token(token: str) -> str | None:
+        async def verify_static_token(token: str) -> str | None:
             if hmac.compare_digest(token, static_token):
                 return resolve_workspace_id(token)
             return None

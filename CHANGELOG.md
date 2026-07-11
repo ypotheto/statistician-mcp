@@ -3,6 +3,40 @@
 All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); versioning is semver.
 
+## Unreleased — Phase 7a (DO Spaces + Postgres key store)
+
+- **`SpacesBackend`** (`storage.py`): a DigitalOcean Spaces (S3-compatible, via
+  `boto3`) implementation of `StorageBackend`, selected by setting
+  `STATMCP_SPACES_BUCKET` (plus endpoint/key/secret/region) instead of the default
+  `LocalDirBackend`. Unlocks ephemeral-disk compute (e.g. DO App Platform) for
+  dataset/artifact storage. Namespaced under `STATMCP_SPACES_PREFIX` (default
+  `statistician-mcp`) so the bucket can be safely shared with other services
+  (each their own prefix, each their own bucket-scoped Spaces key) without key
+  collisions — verified live against a real shared bucket, including that two
+  prefixes round-trip independently.
+- Storage-backend contract tests (`tests/test_storage.py`) run against both
+  backends via a shared parametrized fixture, `SpacesBackend`'s half mocked with
+  `moto` — no real Spaces bucket needed to verify the two stay behaviorally
+  identical (write/read roundtrip, missing-key `FileNotFoundError`, idempotent
+  delete, prefix-scoped `list`), plus a dedicated cross-service isolation test.
+- **`apikeys.py` restructured into a `KeyStore` ABC**: `SqliteKeyStore` (the
+  original behavior, now a class) and a new `PostgresKeyStore` (`psycopg` +
+  `psycopg_pool`), selected by `STATMCP_DATABASE_URL`. `AuthMiddleware`'s
+  `TokenVerifier` is now async and runs the lookup via
+  `anyio.to_thread.run_sync`, so a Postgres-backed verification's network round
+  trip never blocks the event loop. Verified live end-to-end against a real DO
+  Postgres cluster (issue a key via `scripts/issue_key.py`, use it against a
+  running container, confirm 200).
+- Fixed a test-isolation bug this uncovered: `Settings`' new `env_file=".env"`
+  meant test fixtures that didn't explicitly pin `database_url`/`spaces_bucket`
+  would silently inherit real credentials from a developer's `.env` and hit
+  live infrastructure. `tests/conftest.py` now pins both to `None` explicitly.
+- `tests/test_apikeys.py`: contract tests run against both key stores via a
+  shared parametrized fixture, `PostgresKeyStore`'s half against a real
+  `postgres:16-alpine` Docker container spun up for the test session (not
+  mocked — SQL-dialect differences between SQLite and Postgres are exactly what
+  a mock would paper over).
+
 ## v0.2.1 — Hardening (Phase 7, minus deployment)
 
 Deployment (DO Spaces backend, actual hosting, ypotheto-core round-trip against a

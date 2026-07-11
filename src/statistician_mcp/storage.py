@@ -6,6 +6,10 @@ from collections.abc import Callable
 from pathlib import Path, PurePosixPath
 from typing import TypeVar
 
+import boto3
+from botocore.client import Config as BotoConfig
+from botocore.exceptions import ClientError
+
 T = TypeVar("T")
 
 _RETRY_ATTEMPTS = 8
@@ -33,9 +37,9 @@ def _retry_on_permission_error(fn: Callable[[], T]) -> T:
 
 
 class StorageBackend(ABC):
-    """Byte-oriented key-value storage. `LocalDirBackend` is the only implementation
-    today; a DigitalOcean Spaces (S3-compatible) backend is added in Phase 7 so the
-    hosted product can run on ephemeral-disk compute."""
+    """Byte-oriented key-value storage. `LocalDirBackend` writes to a local
+    directory (Droplet + volume); `SpacesBackend` writes to a DigitalOcean Spaces
+    (S3-compatible) bucket so the same app can run on ephemeral-disk compute."""
 
     @abstractmethod
     def write_bytes(self, path: str, data: bytes) -> None: ...
@@ -117,4 +121,80 @@ class LocalDirBackend(StorageBackend):
                 # stat call, because something else deleted it concurrently. Same
                 # benign race as in DatasetStore.list() -- skip it.
                 continue
+        return results
+
+
+class SpacesBackend(StorageBackend):
+    """DigitalOcean Spaces (S3-compatible). Keys map straight to `path` — no local
+    filesystem involved, so the lexical traversal guard in `LocalDirBackend` doesn't
+    apply here; a `path` containing `..` is just an ordinary (if odd) object key.
+
+    `prefix` namespaces every key under e.g. `statistician-mcp/` so this backend
+    can safely share one bucket with other services (each given its own prefix)
+    without their keys ever colliding. The prefix is added/stripped transparently
+    -- callers (DatasetStore, ArtifactStore) only ever see `path` relative to this
+    backend's own root, exactly as with LocalDirBackend."""
+
+    def __init__(
+        self,
+        *,
+        bucket: str,
+        endpoint_url: str,
+        access_key: str,
+        secret_key: str,
+        region: str,
+        prefix: str = "",
+    ) -> None:
+        self._bucket = bucket
+        self._prefix = prefix.strip("/")
+        self._client = boto3.client(
+            "s3",
+            endpoint_url=endpoint_url,
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            region_name=region,
+            config=BotoConfig(s3={"addressing_style": "virtual"}),
+        )
+
+    def _key(self, path: str) -> str:
+        return f"{self._prefix}/{path}" if self._prefix else path
+
+    @staticmethod
+    def _is_not_found(exc: ClientError) -> bool:
+        code = exc.response.get("Error", {}).get("Code", "")
+        status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+        return code in ("404", "NoSuchKey", "NotFound") or status == 404
+
+    def write_bytes(self, path: str, data: bytes) -> None:
+        self._client.put_object(Bucket=self._bucket, Key=self._key(path), Body=data)
+
+    def read_bytes(self, path: str) -> bytes:
+        try:
+            response = self._client.get_object(Bucket=self._bucket, Key=self._key(path))
+        except ClientError as exc:
+            if self._is_not_found(exc):
+                raise FileNotFoundError(path) from exc
+            raise
+        return response["Body"].read()
+
+    def exists(self, path: str) -> bool:
+        try:
+            self._client.head_object(Bucket=self._bucket, Key=self._key(path))
+        except ClientError as exc:
+            if self._is_not_found(exc):
+                return False
+            raise
+        return True
+
+    def delete(self, path: str) -> None:
+        # S3-style delete is already idempotent -- no error on a missing key.
+        self._client.delete_object(Bucket=self._bucket, Key=self._key(path))
+
+    def list(self, prefix: str) -> list[str]:
+        results: list[str] = []
+        paginator = self._client.get_paginator("list_objects_v2")
+        strip_len = len(self._prefix) + 1 if self._prefix else 0
+        for page in paginator.paginate(Bucket=self._bucket, Prefix=self._key(prefix)):
+            for obj in page.get("Contents", []):
+                results.append(obj["Key"][strip_len:])
         return results

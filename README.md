@@ -62,9 +62,13 @@ Two modes, set via `STATMCP_AUTH_MODE` (default `token`):
 - **`token`** — a single static bearer token via `STATMCP_API_TOKEN`. Empty/unset
   disables auth entirely (dev only — this is what stdio/local testing above uses).
   Every valid request hashes to one shared workspace.
-- **`keys`** — a real per-tenant API-key table (SQLite, at
-  `{STATMCP_DATA_DIR}/keys.db`), each key resolving to its own workspace. Manage
-  keys with the admin script:
+- **`keys`** — a real per-tenant API-key table, each key resolving to its own
+  workspace. SQLite at `{STATMCP_DATA_DIR}/keys.db` by default; set
+  `STATMCP_DATABASE_URL` to a Postgres DSN to use `PostgresKeyStore` instead (a
+  hosted deployment's natural choice — the table is created automatically on
+  first connect, in whatever schema the DSN's role defaults to via its
+  `search_path`). Manage keys with the admin script (targets whichever store the
+  server would use; `--db PATH` overrides to force SQLite at that path):
 
   ```powershell
   .\.venv\Scripts\python.exe scripts\issue_key.py issue ws_acme --plan pro
@@ -86,3 +90,33 @@ docker run -p 8347:8347 -v statmcp-data:/data statistician-mcp
 
 Runs as a non-root user, healthchecks `/healthz`. Set `STATMCP_AUTH_MODE=keys` and
 mount `/data` persistently to keep the issued-key database across restarts.
+
+## Storage backend
+
+Dataset/artifact storage defaults to local disk under `{STATMCP_DATA_DIR}/storage`
+(`LocalDirBackend`) — fine for a Droplet with a mounted volume, but incompatible
+with ephemeral-disk compute like DO App Platform. Setting `STATMCP_SPACES_BUCKET`
+switches to a DigitalOcean Spaces bucket (`SpacesBackend`) instead; all of
+endpoint/key/secret must be set together:
+
+```
+STATMCP_SPACES_BUCKET=my-bucket
+STATMCP_SPACES_ENDPOINT=https://sfo3.digitaloceanspaces.com
+STATMCP_SPACES_KEY=...
+STATMCP_SPACES_SECRET=...
+STATMCP_SPACES_REGION=sfo3          # optional, defaults to nyc3
+STATMCP_SPACES_PREFIX=statistician-mcp   # optional, this is already the default
+```
+
+If the bucket is shared with other services (each their own MCP server, say),
+`STATMCP_SPACES_PREFIX` namespaces every key this app writes under e.g.
+`statistician-mcp/...`, so two services can point at the same bucket with
+different prefixes and never see or collide with each other's objects — give
+each service its own prefix (and, on the DO side, its own Spaces access key
+scoped to just that bucket via `doctl spaces keys create <name> --grants
+'bucket=my-bucket;permission=readwrite'`).
+
+`STATMCP_DATABASE_URL` (see Authentication above) is independent of this
+setting — one config switch for the key table, one for dataset/artifact
+storage; a deployment can mix and match (e.g. Postgres keys + local-disk
+storage on a Droplet, or Postgres keys + Spaces storage for App Platform).

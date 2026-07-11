@@ -8,6 +8,10 @@
 # variable for an app's own URL, so it must be set to the real
 # https://<app>.ondigitalocean.app URL (or custom domain) after the first
 # deploy, once that URL is known -- updating an env var triggers a redeploy.
+#
+# region=nyc co-locates with both the Postgres cluster (nyc1) and the Spaces
+# bucket (nyc3) -- minimizes latency for both the per-request key lookup and
+# dataset/artifact storage.
 name: statistician-mcp
 region: nyc
 services:
@@ -38,13 +42,13 @@ services:
         scope: RUN_TIME
         type: SECRET
       - key: STATMCP_SPACES_BUCKET
-        value: "yp-mcp-bucket"
+        value: "yp-mcp-spaces"
         scope: RUN_TIME
       - key: STATMCP_SPACES_ENDPOINT
-        value: "https://sfo3.digitaloceanspaces.com"
+        value: "https://nyc3.digitaloceanspaces.com"
         scope: RUN_TIME
       - key: STATMCP_SPACES_REGION
-        value: "sfo3"
+        value: "nyc3"
         scope: RUN_TIME
       - key: STATMCP_SPACES_PREFIX
         value: "statistician-mcp"

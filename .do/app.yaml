@@ -1,0 +1,59 @@
+# DigitalOcean App Platform spec for statistician-mcp.
+#
+# Secret values below are placeholders -- never commit real credentials here.
+# The actual deploy substitutes real values from .env into a throwaway copy of
+# this file (not checked in); see the deployment conversation for how.
+#
+# STATMCP_PUBLIC_BASE_URL is also a placeholder: App Platform has no bindable
+# variable for an app's own URL, so it must be set to the real
+# https://<app>.ondigitalocean.app URL (or custom domain) after the first
+# deploy, once that URL is known -- updating an env var triggers a redeploy.
+name: statistician-mcp
+region: nyc
+services:
+  - name: web
+    github:
+      repo: ypotheto/statistician-mcp
+      branch: main
+      deploy_on_push: true
+    dockerfile_path: Dockerfile
+    http_port: 8347
+    instance_count: 1
+    instance_size_slug: basic-s
+    health_check:
+      http_path: /healthz
+      initial_delay_seconds: 10
+      period_seconds: 30
+      timeout_seconds: 5
+      failure_threshold: 3
+    envs:
+      - key: STATMCP_AUTH_MODE
+        value: "keys"
+        scope: RUN_TIME
+      - key: STATMCP_PUBLIC_BASE_URL
+        value: "REPLACE_AFTER_FIRST_DEPLOY"
+        scope: RUN_TIME
+      - key: STATMCP_DATABASE_URL
+        value: "REPLACE_ME"
+        scope: RUN_TIME
+        type: SECRET
+      - key: STATMCP_SPACES_BUCKET
+        value: "yp-mcp-bucket"
+        scope: RUN_TIME
+      - key: STATMCP_SPACES_ENDPOINT
+        value: "https://sfo3.digitaloceanspaces.com"
+        scope: RUN_TIME
+      - key: STATMCP_SPACES_REGION
+        value: "sfo3"
+        scope: RUN_TIME
+      - key: STATMCP_SPACES_PREFIX
+        value: "statistician-mcp"
+        scope: RUN_TIME
+      - key: STATMCP_SPACES_KEY
+        value: "REPLACE_ME"
+        scope: RUN_TIME
+        type: SECRET
+      - key: STATMCP_SPACES_SECRET
+        value: "REPLACE_ME"
+        scope: RUN_TIME
+        type: SECRET

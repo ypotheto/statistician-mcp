@@ -8,11 +8,14 @@ from statistician_mcp import __version__, usage
 from statistician_mcp.artifacts import ArtifactStore
 from statistician_mcp.config import Settings
 from statistician_mcp.datasets import DatasetStore
+from statistician_mcp.modules.advisor import register_advisor_tools
 from statistician_mcp.modules.datasets_tools import register_dataset_tools
 from statistician_mcp.modules.doe import register_doe_tools
 from statistician_mcp.modules.eda import register_eda_tools
 from statistician_mcp.modules.inference import register_inference_tools
+from statistician_mcp.modules.msa import register_msa_tools
 from statistician_mcp.modules.power import register_power_tools
+from statistician_mcp.modules.regression import register_regression_tools
 from statistician_mcp.modules.spc import register_spc_tools
 from statistician_mcp.storage import LocalDirBackend
 
@@ -50,6 +53,9 @@ def create_server(settings: Settings) -> ServerBundle:
     register_power_tools(mcp, artifact_store)
     register_doe_tools(mcp, dataset_store, artifact_store)
     register_spc_tools(mcp, dataset_store, artifact_store)
+    register_msa_tools(mcp, dataset_store, artifact_store)
+    register_regression_tools(mcp, dataset_store, artifact_store)
+    register_advisor_tools(mcp, dataset_store)
 
     return ServerBundle(
         mcp=mcp, settings=settings, dataset_store=dataset_store, artifact_store=artifact_store

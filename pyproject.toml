@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ypotheto-statistician-mcp"
-version = "0.1.0"
+dynamic = ["version"]
 description = "MCP server providing virtual statistician tools for DOE, SPC, EDA, statistical modeling, and data-driven decision support."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -38,6 +38,9 @@ dev = [
 
 [project.scripts]
 statistician-mcp = "statistician_mcp.cli:main"
+
+[tool.hatch.version]
+path = "src/statistician_mcp/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/statistician_mcp"]

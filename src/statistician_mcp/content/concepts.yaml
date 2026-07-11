@@ -1,0 +1,333 @@
+p_value:
+  title: p-value
+  explanation: >
+    The probability of seeing a result at least as extreme as the one observed,
+    if the null hypothesis were actually true. A small p-value (conventionally
+    below 0.05) means the observed data would be unusual under the null
+    hypothesis, so we reject it. It is not the probability the null hypothesis
+    is true, and it says nothing about the size or practical importance of an
+    effect — always look at the effect size and confidence interval alongside it.
+
+confidence_interval:
+  title: Confidence interval
+  explanation: >
+    A range of plausible values for an unknown population parameter (a mean,
+    proportion, or difference), built so that if you repeated the study many
+    times, that procedure would capture the true value in roughly 95% (or
+    whatever confidence level you chose) of those repetitions. A single interval
+    either does or doesn't contain the truth — the confidence level describes
+    the long-run reliability of the method, not the probability for this
+    particular interval.
+
+type_i_error:
+  title: Type I error
+  explanation: >
+    A false positive — rejecting a true null hypothesis, e.g. concluding a
+    process changed when it actually didn't. Its rate is controlled by alpha
+    (usually 0.05), which you set in advance as the maximum false-alarm rate
+    you're willing to accept.
+
+type_ii_error:
+  title: Type II error
+  explanation: >
+    A false negative — failing to detect a real effect or difference that
+    actually exists, e.g. concluding a process didn't change when it did. Its
+    rate (beta) is driven by sample size, effect size, and variability; power
+    (1 - beta) is the complementary probability of correctly detecting a real
+    effect.
+
+statistical_power:
+  title: Statistical power
+  explanation: >
+    The probability a test correctly detects a real effect of a given size —
+    equivalently, 1 minus the Type II error rate. Power increases with larger
+    sample size, larger true effect size, lower measurement noise, and higher
+    alpha. Use compute_power_or_sample_size before running a study to make sure
+    it's large enough to detect an effect that actually matters.
+
+effect_size:
+  title: Effect size
+  explanation: >
+    A standardized measure of how large a difference or relationship is,
+    independent of sample size — unlike a p-value, which can be tiny even for a
+    trivial effect if n is large enough. Cohen's d (for mean differences) and
+    Cohen's h (for proportions) are the most common. Always report effect size
+    alongside significance so a reader can judge practical, not just
+    statistical, importance.
+
+cohens_d:
+  title: Cohen's d
+  explanation: >
+    A standardized mean difference: the difference between two group means
+    divided by the pooled standard deviation. Rough conventional benchmarks are
+    0.2 (small), 0.5 (medium), and 0.8 (large), but what counts as meaningful
+    depends entirely on your process and its cost of variation.
+
+normal_distribution:
+  title: Normal (Gaussian) distribution
+  explanation: >
+    The symmetric bell-shaped distribution that many statistical procedures
+    (t-tests, ANOVA, control charts) assume the underlying data or model
+    residuals follow, at least approximately. It's checked with tools like
+    test_normality; when it fails, use the reported nonparametric alternative or
+    a transformation (e.g. Box-Cox) instead of trusting the parametric result.
+
+central_limit_theorem:
+  title: Central limit theorem
+  explanation: >
+    The reason many statistical procedures work even on non-normal raw data:
+    the sampling distribution of a mean (or sum) approaches a normal
+    distribution as sample size grows, regardless of the shape of the
+    underlying population. This is why t-tests and control charts on subgroup
+    averages are fairly robust even when individual measurements aren't
+    perfectly normal — but it doesn't rescue small subgroups from strongly
+    skewed data.
+
+welch_t_test:
+  title: Welch's t-test
+  explanation: >
+    A two-sample t-test variant that does not assume the two groups have equal
+    variance, using an adjusted (usually non-integer) degrees of freedom.
+    compare_means uses Welch by default because assuming equal variance when
+    it's false inflates the false-positive rate — Welch is safe even when
+    variances happen to be equal, so there is little reason to prefer the
+    classic pooled-variance t-test.
+
+anova:
+  title: ANOVA (analysis of variance)
+  explanation: >
+    A test for whether 3 or more group means differ, by comparing between-group
+    variance to within-group variance (an F-test). A significant ANOVA tells
+    you at least one group differs, but not which ones — that's what a
+    post-hoc test (Tukey HSD, Games-Howell, or Dunn) is for.
+
+post_hoc_test:
+  title: Post-hoc test
+  explanation: >
+    A follow-up pairwise comparison run after a significant ANOVA to find which
+    specific groups differ, with a multiple-comparison correction so the
+    combined false-positive rate across all pairs stays controlled. Tukey HSD
+    assumes equal variances, Games-Howell doesn't, and Dunn's test is the
+    nonparametric option after a Kruskal-Wallis test.
+
+cp_vs_cpk:
+  title: Cp vs. Cpk
+  explanation: >
+    Both measure process capability against spec limits using within-subgroup
+    sigma, but Cp only measures spread relative to the tolerance width and
+    ignores where the process is centered, while Cpk also accounts for how
+    close the mean is to the nearer spec limit. A process can have a high Cp
+    but a low Cpk if it's spread narrowly but off-center — Cpk is always the
+    more honest number, and Cp = Cpk only when the process is perfectly centered.
+
+pp_vs_ppk:
+  title: Pp/Ppk vs. Cp/Cpk
+  explanation: >
+    Pp and Ppk are computed the same way as Cp and Cpk but use the overall
+    sample standard deviation instead of the within-subgroup (short-term)
+    estimate. Cp/Cpk describe what the process is capable of run-to-run under
+    stable conditions; Pp/Ppk describe what customers actually experienced,
+    including any long-term drift or shift-to-shift variation. A large gap
+    between Cpk and Ppk usually points to special-cause variation between
+    subgroups.
+
+dpmo:
+  title: DPMO (defects per million opportunities)
+  explanation: >
+    The expected number of defects per million units, extrapolated from a
+    process's mean and standard deviation against spec limits — used as a
+    common yardstick for comparing very different processes. It assumes the
+    underlying data is (approximately) normal; assess_capability flags this
+    assumption explicitly.
+
+sigma_level:
+  title: Process sigma level
+  explanation: >
+    How many standard deviations fit between the process mean and the nearer
+    spec limit, expressed as a Z-score. Higher is better; this server reports
+    the direct value without the popular "1.5-sigma long-term shift" adjustment
+    used in some Six Sigma literature, so don't directly compare our sigma
+    level to numbers computed with that convention without accounting for it.
+
+control_chart:
+  title: Control chart
+  explanation: >
+    A time-ordered plot of a process statistic with a center line and control
+    limits (typically +/-3 sigma), used to distinguish routine ("common
+    cause") variation from unusual ("special cause") variation worth
+    investigating. Which chart to use depends on the data: Xbar-R/Xbar-S for
+    subgrouped continuous data, I-MR for individual continuous readings, and
+    p/np/c/u for counts and proportions.
+
+nelson_rules:
+  title: Nelson (Western Electric) rules
+  explanation: >
+    A set of 8 patterns checked against a control chart beyond the simple
+    "one point outside the limits" check — e.g. 9 points in a row on one side
+    of the center line, or 6 points steadily trending — each of which signals a
+    likely special cause even when no single point is extreme. More rules
+    firing means more sensitivity but also more false alarms; investigate any
+    violation but don't assume every one reflects a real process change.
+
+ewma:
+  title: EWMA chart
+  explanation: >
+    An exponentially weighted moving average chart that gives more weight to
+    recent observations (controlled by lambda, typically 0.1-0.3) and
+    progressively less to older ones. It's much more sensitive than a Shewhart
+    chart to small, sustained shifts (under about 1.5 sigma) that a standard
+    chart might miss for many subgroups.
+
+cusum:
+  title: CUSUM chart
+  explanation: >
+    A cumulative-sum chart that accumulates deviations from a target in two
+    running sums (one for upward shifts, one for downward), signaling as soon
+    as either sum exceeds a decision interval h. Like EWMA, it detects small
+    sustained shifts faster than a Shewhart chart, at the cost of being slower
+    to react to a single large, one-off spike.
+
+resolution_iii_iv_v:
+  title: Design resolution (III, IV, V)
+  explanation: >
+    Describes which effects are confounded (aliased) with each other in a
+    fractional factorial design. Resolution III designs confound main effects
+    with 2-factor interactions (use only for screening many factors when
+    interactions are assumed negligible); Resolution IV designs keep main
+    effects clear of 2-factor interactions but confound 2-factor interactions
+    with each other; Resolution V designs keep both main effects and 2-factor
+    interactions clear of each other. Higher resolution needs more runs.
+
+confounding:
+  title: Confounding / aliasing
+  explanation: >
+    Two or more effects are confounded when a fractional factorial design
+    can't distinguish their contributions to the response — an observed
+    "effect of A" might actually be A, or the B*C interaction, or some
+    combination. design_experiment reports the full alias structure for
+    fractional designs so you know exactly what's aliased with what before you
+    interpret any single effect.
+
+factorial_design:
+  title: Factorial design
+  explanation: >
+    An experiment that varies multiple factors simultaneously across their
+    combinations rather than one at a time, which is both more run-efficient
+    and — unlike one-factor-at-a-time testing — the only way to detect
+    interactions (where one factor's effect depends on another factor's level).
+    A full factorial tests every combination; a fractional factorial tests a
+    carefully chosen subset at the cost of some confounding.
+
+response_surface:
+  title: Response surface methodology
+  explanation: >
+    A follow-up to factorial experimentation that fits a second-order (curved)
+    model — via a central composite or Box-Behnken design — to find optimal
+    factor settings rather than just which factors matter. analyze_response_
+    surface reports the stationary point (the fitted optimum) and whether it's
+    a maximum, minimum, or saddle point.
+
+desirability_function:
+  title: Desirability function
+  explanation: >
+    A way to combine multiple, possibly competing response goals (maximize one,
+    minimize another, hit a target on a third) into a single 0-1 score per
+    response, then multiply them together (geometric mean) into one overall
+    desirability to optimize. A desirability of 0 for any single response
+    means that setting is unacceptable no matter how well it does on the others.
+
+gauge_rr:
+  title: Gauge R&R
+  explanation: >
+    A measurement systems analysis quantifying how much of your observed
+    variation comes from the measurement system itself (repeatability: the same
+    operator remeasuring the same part; reproducibility: different operators
+    measuring the same part) versus genuine part-to-part variation. If Gauge
+    R&R eats up too much of the total variation, you can't trust the
+    measurements enough to conclude anything about the parts.
+
+ndc:
+  title: ndc (number of distinct categories)
+  explanation: >
+    An estimate of how many distinct groups the measurement system can
+    reliably distinguish across the observed part-to-part range, computed as
+    1.41 x (part standard deviation / Gauge R&R standard deviation). AIAG's
+    rule of thumb wants ndc >= 5; below that, the gauge is too coarse to tell
+    parts apart reliably enough for process control.
+
+percent_study_var:
+  title: "%StudyVar (Gauge R&R)"
+  explanation: >
+    The Gauge R&R standard deviation expressed as a percentage of total study
+    variation's standard deviation (a 6-sigma spread, by AIAG convention).
+    Below 10% is generally acceptable, 10-30% is marginal, and above 30% is
+    unacceptable — the measurement system is contributing too much noise
+    relative to genuine part-to-part differences.
+
+tost_equivalence:
+  title: TOST equivalence testing
+  explanation: >
+    "Two One-Sided Tests" — instead of testing whether two things differ (the
+    usual null hypothesis is "no difference"), TOST flips the burden of proof
+    to test whether they're equivalent within a pre-specified margin (the null
+    hypothesis is "they differ by at least the margin"). Use it for "are these
+    two lots/methods/lines interchangeable" questions, where failing to reject
+    the usual difference test is not the same as proving equivalence.
+
+r_squared:
+  title: R-squared
+  explanation: >
+    The proportion of variance in the response explained by a fitted model,
+    from 0 (explains nothing) to 1 (fits perfectly). Adjusted R-squared
+    penalizes adding predictors that don't earn their keep, so use it (not
+    plain R-squared) when comparing models with different numbers of terms —
+    plain R-squared never decreases just from adding more predictors, even
+    useless ones.
+
+vif_multicollinearity:
+  title: VIF and multicollinearity
+  explanation: >
+    The Variance Inflation Factor measures how much a predictor's coefficient
+    variance is inflated because it's linearly correlated with other
+    predictors in the model. A VIF above 5 (some use 10) signals problematic
+    multicollinearity — the individual coefficient estimates and their p-values
+    become unstable and hard to interpret, even if the model's overall
+    predictions are still fine.
+
+cooks_distance:
+  title: Cook's distance
+  explanation: >
+    A per-observation measure of how much a regression model's fitted values
+    would change if that one observation were removed — it combines how
+    extreme a point's predictors are (leverage) with how poorly the model fits
+    it (residual size). A commonly used flagging threshold is 4/n; flagged
+    points deserve a look, not automatic removal — some are genuine, important
+    extreme cases.
+
+odds_ratio:
+  title: Odds ratio (logistic regression)
+  explanation: >
+    In logistic regression, exp(coefficient) gives the odds ratio — how much
+    the odds of the outcome multiply for a one-unit increase in that predictor,
+    holding others constant. An odds ratio of 1 means no effect, above 1 means
+    higher odds, below 1 means lower odds; it is a ratio of odds, not of
+    probabilities, so it shouldn't be read as "X times more likely."
+
+auc_roc:
+  title: ROC curve and AUC
+  explanation: >
+    The ROC curve plots a binary classifier's true-positive rate against its
+    false-positive rate as the decision threshold varies; AUC (area under that
+    curve) summarizes overall discrimination in a single number from 0.5
+    (no better than chance) to 1.0 (perfect separation). AUC doesn't depend on
+    choosing a specific classification threshold, unlike accuracy.
+
+weibull_distribution:
+  title: Weibull distribution
+  explanation: >
+    A flexible distribution widely used for reliability and time-to-failure
+    data, whose shape parameter controls whether the failure rate decreases
+    (shape < 1, "infant mortality"), stays constant (shape = 1, equivalent to
+    exponential), or increases (shape > 1, wear-out) over time. fit_distribution
+    fits it (along with normal/lognormal/exponential/gamma) and reports which
+    family best matches your data via a goodness-of-fit statistic.

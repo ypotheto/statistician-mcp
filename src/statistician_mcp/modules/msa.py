@@ -7,7 +7,7 @@ from mcp.server.fastmcp import FastMCP
 
 from statistician_mcp import envelope
 from statistician_mcp.artifacts import ArtifactStore
-from statistician_mcp.datasets import DatasetStore
+from statistician_mcp.datasets import DatasetStore, get_dataframe_for_analysis
 from statistician_mcp.errors import ColumnNotFoundError, ValidationError
 from statistician_mcp.stats import gauge_rr as stats_gauge_rr
 from statistician_mcp.utils.plotting import new_figure, render_png
@@ -30,7 +30,7 @@ def register_msa_tools(mcp: FastMCP, store: DatasetStore, artifacts: ArtifactSto
         categories the gauge can resolve). Verdict thresholds: <10% StudyVar
         acceptable, 10-30% marginal, >30% unacceptable. Requires an equal number of
         replicates in every part x operator cell."""
-        df = store.get_dataframe(get_current_workspace_id(), handle)
+        df = get_dataframe_for_analysis(store, get_current_workspace_id(), handle)
         _require_columns(df, [part_column, operator_column, value_column])
         if not pd.api.types.is_numeric_dtype(df[value_column]):
             raise ValidationError(f"column '{value_column}' is not numeric")
@@ -62,7 +62,7 @@ def register_msa_tools(mcp: FastMCP, store: DatasetStore, artifacts: ArtifactSto
         """Fleiss' kappa for agreement among 2+ raters classifying the same subjects
         (e.g. pass/fail inspection). Each row is a subject/part; each named column
         is one rater's judgment."""
-        df = store.get_dataframe(get_current_workspace_id(), handle)
+        df = get_dataframe_for_analysis(store, get_current_workspace_id(), handle)
         _require_columns(df, rater_columns)
         if len(rater_columns) < 2:
             raise ValidationError("analyze_attribute_agreement needs at least 2 rater columns")

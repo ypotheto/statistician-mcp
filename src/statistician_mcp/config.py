@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     api_token: str | None = None
     auth_mode: str = "token"
     public_base_url: str | None = None
+    request_timeout_seconds: float = 120.0
 
 
 def get_settings() -> Settings:

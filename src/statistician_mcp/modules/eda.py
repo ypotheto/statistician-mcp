@@ -10,13 +10,11 @@ from statsmodels.nonparametric.smoothers_lowess import lowess
 
 from statistician_mcp import envelope
 from statistician_mcp.artifacts import ArtifactStore
-from statistician_mcp.datasets import DatasetStore
+from statistician_mcp.datasets import DatasetStore, get_dataframe_for_analysis
 from statistician_mcp.errors import ColumnNotFoundError, ValidationError
 from statistician_mcp.stats.assumptions import check_normality
 from statistician_mcp.utils.plotting import new_figure, render_png
 from statistician_mcp.workspace import get_current_workspace_id
-
-MAX_ANALYSIS_ROWS = 200_000
 
 
 def register_eda_tools(mcp: FastMCP, store: DatasetStore, artifacts: ArtifactStore) -> None:
@@ -285,13 +283,7 @@ def register_eda_tools(mcp: FastMCP, store: DatasetStore, artifacts: ArtifactSto
 
 
 def _get_df(store: DatasetStore, handle: str) -> pd.DataFrame:
-    df = store.get_dataframe(get_current_workspace_id(), handle)
-    if len(df) > MAX_ANALYSIS_ROWS:
-        raise ValidationError(
-            f"dataset has {len(df)} rows, exceeding the {MAX_ANALYSIS_ROWS}-row analysis limit",
-            hint="aggregate or sample the dataset with transform_dataset first",
-        )
-    return df
+    return get_dataframe_for_analysis(store, get_current_workspace_id(), handle)
 
 
 def _require_columns(df: pd.DataFrame, names: list[str]) -> None:

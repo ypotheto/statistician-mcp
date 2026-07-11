@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import threading
 import time
 import uuid
 from collections import OrderedDict
@@ -13,6 +14,16 @@ import pandas as pd
 from statistician_mcp.errors import DatasetNotFoundError, QuotaExceededError, ValidationError
 from statistician_mcp.storage import StorageBackend
 from statistician_mcp.workspace import DEFAULT_QUOTAS
+
+# A dataset file can vanish between an existence/enumeration step and the actual
+# read, if another concurrent call deletes it in between (see get_dataframe,
+# get_info, list below). FileNotFoundError is the obvious case; PermissionError is
+# included because Windows enforces mandatory file-sharing locks and can raise it
+# when one thread's read races a concurrent unlink of the same file (a threaded
+# stress test reproduced this) -- Linux, the actual production target, has no such
+# restriction (unlinking an open file is always safe there), but treating both as
+# "this file is gone" is correct and harmless on every platform.
+_TRANSIENT_READ_ERRORS = (FileNotFoundError, PermissionError)
 
 
 @dataclass
@@ -93,6 +104,7 @@ class DatasetStore:
     def __init__(self, backend: StorageBackend, max_cache_entries: int = 16) -> None:
         self._backend = backend
         self._cache: OrderedDict[tuple[str, str], pd.DataFrame] = OrderedDict()
+        self._cache_lock = threading.Lock()
         self._max_cache_entries = max_cache_entries
 
     def _dataset_path(self, workspace_id: str, handle: str) -> str:
@@ -140,30 +152,48 @@ class DatasetStore:
         return info
 
     def get_dataframe(self, workspace_id: str, handle: str) -> pd.DataFrame:
+        # A concurrent miss on the same uncached key can redundantly re-read the
+        # backend (the cache-hit check and the eventual _cache_put aren't one
+        # atomic section) -- accepted as a rare, harmless cost. What the lock
+        # guarantees is that self._cache itself is never corrupted by concurrent
+        # compound mutations (check + move_to_end + evict).
         key = (workspace_id, handle)
-        if key in self._cache:
-            self._cache.move_to_end(key)
-            return self._cache[key]
+        with self._cache_lock:
+            if key in self._cache:
+                self._cache.move_to_end(key)
+                return self._cache[key]
         path = self._dataset_path(workspace_id, handle)
-        if not self._backend.exists(path):
-            raise DatasetNotFoundError(handle)
-        df = pd.read_parquet(io.BytesIO(self._backend.read_bytes(path)))
+        try:
+            raw = self._backend.read_bytes(path)
+        except _TRANSIENT_READ_ERRORS as exc:
+            raise DatasetNotFoundError(handle) from exc
+        df = pd.read_parquet(io.BytesIO(raw))
         self._cache_put(key, df)
         return df
 
     def get_info(self, workspace_id: str, handle: str) -> DatasetInfo:
         path = self._meta_path(workspace_id, handle)
-        if not self._backend.exists(path):
-            raise DatasetNotFoundError(handle)
-        return DatasetInfo.from_dict(json.loads(self._backend.read_bytes(path)))
+        try:
+            raw = self._backend.read_bytes(path)
+        except _TRANSIENT_READ_ERRORS as exc:
+            raise DatasetNotFoundError(handle) from exc
+        return DatasetInfo.from_dict(json.loads(raw))
 
     def list(self, workspace_id: str) -> list[DatasetInfo]:
+        # Enumerating then reading each file is inherently a two-step, non-atomic
+        # sequence -- a concurrent delete() on another thread can remove a file
+        # between the two steps. That's a benign race (the dataset genuinely is
+        # gone), not an error, so a vanished file is skipped rather than raised.
         prefix = f"workspaces/{workspace_id}/datasets/"
-        infos = [
-            DatasetInfo.from_dict(json.loads(self._backend.read_bytes(p)))
-            for p in self._backend.list(prefix)
-            if p.endswith(".meta.json")
-        ]
+        infos = []
+        for p in self._backend.list(prefix):
+            if not p.endswith(".meta.json"):
+                continue
+            try:
+                raw = self._backend.read_bytes(p)
+            except _TRANSIENT_READ_ERRORS:
+                continue
+            infos.append(DatasetInfo.from_dict(json.loads(raw)))
         return sorted(infos, key=lambda i: i.created_at)
 
     def delete(self, workspace_id: str, handle: str) -> None:
@@ -172,10 +202,35 @@ class DatasetStore:
             raise DatasetNotFoundError(handle)
         self._backend.delete(path)
         self._backend.delete(self._meta_path(workspace_id, handle))
-        self._cache.pop((workspace_id, handle), None)
+        with self._cache_lock:
+            self._cache.pop((workspace_id, handle), None)
 
     def _cache_put(self, key: tuple[str, str], df: pd.DataFrame) -> None:
-        self._cache[key] = df
-        self._cache.move_to_end(key)
-        while len(self._cache) > self._max_cache_entries:
-            self._cache.popitem(last=False)
+        with self._cache_lock:
+            self._cache[key] = df
+            self._cache.move_to_end(key)
+            while len(self._cache) > self._max_cache_entries:
+                self._cache.popitem(last=False)
+
+
+# Storage/inspection tools (load, describe, sample, list) may work with datasets up
+# to DEFAULT_QUOTAS.max_rows_per_dataset (500k) since they're cheap, near-O(n) single
+# passes. Compute-heavy analysis tools (regression, ANOVA, control charts, Gauge R&R,
+# ...) are far more expensive per row -- O(n log n) or worse, or per-row Python loops
+# (Nelson rules) -- so they share this tighter cap instead. Every analysis module
+# should resolve its dataset through this helper rather than calling
+# `store.get_dataframe()` directly, so the cap can't be silently bypassed by a new
+# module forgetting to add its own check.
+MAX_ANALYSIS_ROWS = 200_000
+
+
+def get_dataframe_for_analysis(
+    store: DatasetStore, workspace_id: str, handle: str, max_rows: int = MAX_ANALYSIS_ROWS
+) -> pd.DataFrame:
+    df = store.get_dataframe(workspace_id, handle)
+    if len(df) > max_rows:
+        raise ValidationError(
+            f"dataset has {len(df)} rows, exceeding the {max_rows}-row analysis limit",
+            hint="aggregate or sample the dataset with transform_dataset first",
+        )
+    return df

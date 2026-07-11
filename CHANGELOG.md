@@ -3,6 +3,49 @@
 All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); versioning is semver.
 
+## v0.2.1 — Hardening (Phase 7, minus deployment)
+
+Deployment (DO Spaces backend, actual hosting, ypotheto-core round-trip against a
+hosted instance) is split out to Phase 7a and not part of this release; the plan's
+`v0.3.0` marker is reserved for when that's done and verified.
+
+- **Dockerfile**: slim non-root image, uvicorn entrypoint, `/healthz` healthcheck.
+  Not build-tested in this environment (no Docker daemon available) — do a
+  `docker build` sanity check before relying on it.
+- **API-key auth mode** (`STATMCP_AUTH_MODE=keys`): a real per-tenant SQLite key
+  table (hashed keys only) alongside the existing single-static-token mode, behind
+  one shared `AuthMiddleware` built around a pluggable token-verifier so both
+  modes share one code path. `scripts/issue_key.py` admin CLI (issue/disable/list).
+  Default stays `token` mode, so local Claude Desktop/MCP Inspector testing is
+  unaffected.
+- **Per-request timeout** for tool calls (`STATMCP_REQUEST_TIMEOUT_SECONDS`,
+  default 120s), scoped to POST only so it never cuts off a health check, artifact
+  download, or a long-lived streamable-HTTP server-push stream.
+- **Concurrency fixes found via a threaded stress test, not assumed away**:
+  - A lock around `DatasetStore`'s LRU cache (the compound check/evict sequence
+    wasn't atomic).
+  - A closed-over-in-`envelope.tool` guard that closes any matplotlib figure a
+    plotting tool leaked by raising between figure creation and `render_png`
+    (matplotlib keeps figures registered globally until closed).
+  - **`LocalDirBackend`'s path-traversal check** used `Path.resolve()` (a real
+    filesystem lookup) and was found to spuriously reject valid paths under
+    concurrent directory creation on Windows; replaced with a purely lexical
+    containment check, which is both race-free and more robust against TOCTOU/
+    symlink tricks than resolve-and-compare.
+  - **A TOCTOU gap in `DatasetStore.list()`**: enumerating datasets then reading
+    each one is two steps, and a concurrent `delete()` between them raised instead
+    of just omitting the vanished entry. Same fix applied to `get_dataframe`/
+    `get_info`, and to `LocalDirBackend.list()`'s own directory walk.
+  - **Windows-specific file-locking retries**: unlike Linux (the actual production
+    target), Windows can transiently raise `PermissionError` when one thread's
+    read races another's delete of the same file; added a short, shared retry
+    around reads/writes/deletes.
+- **Closed a cross-cutting resource-limit gap**: the 200k-row analysis cap was
+  only ever enforced by `eda.py`'s own private helper — every other analysis
+  module (inference, DOE, SPC, MSA, regression, advisor) called
+  `store.get_dataframe()` directly, bypassing it entirely. Moved to a shared
+  `get_dataframe_for_analysis` helper used by every analysis module.
+
 ## v0.2.0 — DOE, SPC, MSA, regression, advisor (Phases 4-6)
 
 - **DOE** (`design_experiment`, `evaluate_design`, `analyze_factorial`,

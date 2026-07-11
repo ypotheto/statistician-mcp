@@ -8,7 +8,7 @@ from scipy import stats as sp_stats
 
 from statistician_mcp import envelope
 from statistician_mcp.artifacts import ArtifactStore
-from statistician_mcp.datasets import DatasetStore
+from statistician_mcp.datasets import DatasetStore, get_dataframe_for_analysis
 from statistician_mcp.errors import ColumnNotFoundError, ValidationError
 from statistician_mcp.stats import inference as stats_inference
 from statistician_mcp.utils.plotting import new_figure, render_png
@@ -41,7 +41,7 @@ def register_inference_tools(mcp: FastMCP, store: DatasetStore, artifacts: Artif
                 "exactly one of mu, group_column, or paired_with_column must be given"
             )
 
-        df = store.get_dataframe(get_current_workspace_id(), handle)
+        df = get_dataframe_for_analysis(store, get_current_workspace_id(), handle)
         _require_numeric(df, column)
 
         if mu is not None:
@@ -83,7 +83,7 @@ def register_inference_tools(mcp: FastMCP, store: DatasetStore, artifacts: Artif
         """One-way ANOVA across 3+ groups with automatic post-hoc: Tukey HSD when
         variances are equal, Welch ANOVA + Games-Howell when they aren't, or
         Kruskal-Wallis + Dunn when normality fails. Includes a group-means plot."""
-        df = store.get_dataframe(get_current_workspace_id(), handle)
+        df = get_dataframe_for_analysis(store, get_current_workspace_id(), handle)
         _require_numeric(df, column)
         _require_columns(df, [group_column])
 
@@ -184,7 +184,7 @@ def register_inference_tools(mcp: FastMCP, store: DatasetStore, artifacts: Artif
         if (mu is None) == (group_column is None):
             raise ValidationError("exactly one of mu or group_column must be given")
 
-        df = store.get_dataframe(get_current_workspace_id(), handle)
+        df = get_dataframe_for_analysis(store, get_current_workspace_id(), handle)
         _require_numeric(df, column)
 
         if mu is not None:
@@ -235,7 +235,7 @@ def register_inference_tools(mcp: FastMCP, store: DatasetStore, artifacts: Artif
 
         if handle is None or column is None:
             raise ValidationError(f"parameter='{parameter}' requires 'handle' and 'column'")
-        df = store.get_dataframe(get_current_workspace_id(), handle)
+        df = get_dataframe_for_analysis(store, get_current_workspace_id(), handle)
         _require_numeric(df, column)
 
         if parameter == "mean":
@@ -265,7 +265,7 @@ def register_inference_tools(mcp: FastMCP, store: DatasetStore, artifacts: Artif
     ) -> dict[str, Any]:
         """Test whether variance is equal across groups: an F-test for exactly 2
         groups, Levene's test for 3+. Use before choosing pooled vs. Welch methods."""
-        df = store.get_dataframe(get_current_workspace_id(), handle)
+        df = get_dataframe_for_analysis(store, get_current_workspace_id(), handle)
         _require_numeric(df, column)
         _require_columns(df, [group_column])
 

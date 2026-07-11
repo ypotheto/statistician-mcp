@@ -9,7 +9,7 @@ from scipy import stats as sp_stats
 
 from statistician_mcp import envelope
 from statistician_mcp.artifacts import ArtifactStore
-from statistician_mcp.datasets import DatasetStore
+from statistician_mcp.datasets import DatasetStore, get_dataframe_for_analysis
 from statistician_mcp.errors import ColumnNotFoundError, ValidationError
 from statistician_mcp.stats import regression as stats_regression
 from statistician_mcp.utils.formulas import FormulaError
@@ -27,7 +27,7 @@ def register_regression_tools(mcp: FastMCP, store: DatasetStore, artifacts: Arti
         column names / ~ + - : * — no function calls). Returns coefficients with
         CIs, R²/adj-R², VIF (multicollinearity), Cook's-distance-flagged rows, and
         4-panel residual diagnostics."""
-        df = store.get_dataframe(get_current_workspace_id(), handle)
+        df = get_dataframe_for_analysis(store, get_current_workspace_id(), handle)
         try:
             result = stats_regression.fit_linear_model(df, formula)
         except FormulaError as exc:
@@ -47,7 +47,7 @@ def register_regression_tools(mcp: FastMCP, store: DatasetStore, artifacts: Arti
         """Fit a logistic regression from a formula (response must be 0/1). Returns
         odds ratios with CIs, a classification summary (accuracy/precision/recall),
         and an ROC curve artifact with AUC."""
-        df = store.get_dataframe(get_current_workspace_id(), handle)
+        df = get_dataframe_for_analysis(store, get_current_workspace_id(), handle)
         try:
             result = stats_regression.fit_logistic_model(df, formula)
         except FormulaError as exc:
@@ -73,7 +73,7 @@ def register_regression_tools(mcp: FastMCP, store: DatasetStore, artifacts: Arti
         linear models are given and one's terms are a subset of the other's."""
         if len(formulas) < 2:
             raise ValidationError("compare_models needs at least 2 formulas")
-        df = store.get_dataframe(get_current_workspace_id(), handle)
+        df = get_dataframe_for_analysis(store, get_current_workspace_id(), handle)
         try:
             result = stats_regression.compare_models(df, formulas, family)
         except FormulaError as exc:
@@ -102,7 +102,7 @@ def register_regression_tools(mcp: FastMCP, store: DatasetStore, artifacts: Arti
         also returns confidence and prediction intervals."""
         if not new_data:
             raise ValidationError("new_data must have at least one row")
-        df = store.get_dataframe(get_current_workspace_id(), handle)
+        df = get_dataframe_for_analysis(store, get_current_workspace_id(), handle)
         new_df = pd.DataFrame(new_data)
         try:
             result = stats_regression.predict_from_model(df, formula, new_df, family, confidence)
@@ -122,7 +122,7 @@ def register_regression_tools(mcp: FastMCP, store: DatasetStore, artifacts: Arti
         (positive-only distributions are skipped for non-positive data), rank by
         an Anderson-Darling-style statistic, and report the best fit. Renders a
         histogram with the best-fit density overlay."""
-        df = store.get_dataframe(get_current_workspace_id(), handle)
+        df = get_dataframe_for_analysis(store, get_current_workspace_id(), handle)
         _require_numeric(df, column)
         try:
             result = stats_regression.fit_distribution(df[column].to_numpy(), distributions)

@@ -10,7 +10,7 @@ from scipy import stats as sp_stats
 
 from statistician_mcp import envelope
 from statistician_mcp.artifacts import ArtifactStore
-from statistician_mcp.datasets import DatasetStore
+from statistician_mcp.datasets import DatasetStore, get_dataframe_for_analysis
 from statistician_mcp.errors import ColumnNotFoundError, ValidationError
 from statistician_mcp.stats import desirability as stats_desirability
 from statistician_mcp.stats import doe_analysis, doe_designs
@@ -106,7 +106,7 @@ def register_doe_tools(mcp: FastMCP, store: DatasetStore, artifacts: ArtifactSto
         pairwise column correlation), alias structure, and power to detect a main
         effect of the given size at the given noise sigma. Use to sanity-check a
         design before running the experiment."""
-        df = store.get_dataframe(get_current_workspace_id(), handle)
+        df = get_dataframe_for_analysis(store, get_current_workspace_id(), handle)
         parsed_factors = _parse_factors(factors)
         names = list(parsed_factors.keys())
         _require_columns(df, names)
@@ -130,7 +130,7 @@ def register_doe_tools(mcp: FastMCP, store: DatasetStore, artifacts: ArtifactSto
         hierarchical model-reduction suggestion. Automatically analyzes in coded
         (-1/+1) units using each factor's `{name}_coded` column if the dataset has
         one (e.g. from design_experiment), else standardizes the raw column."""
-        df = store.get_dataframe(get_current_workspace_id(), handle)
+        df = get_dataframe_for_analysis(store, get_current_workspace_id(), handle)
         _require_columns(df, [response, *factor_names])
         working = _coded_working_frame(df, factor_names)
 
@@ -157,7 +157,7 @@ def register_doe_tools(mcp: FastMCP, store: DatasetStore, artifacts: ArtifactSto
         saddle), and contour + 3D surface plots over the first two factors."""
         if len(factor_names) < 2:
             raise ValidationError("analyze_response_surface needs at least 2 factors")
-        df = store.get_dataframe(get_current_workspace_id(), handle)
+        df = get_dataframe_for_analysis(store, get_current_workspace_id(), handle)
         _require_columns(df, [response, *factor_names])
         working = _coded_working_frame(df, factor_names)
 
@@ -191,7 +191,7 @@ def register_doe_tools(mcp: FastMCP, store: DatasetStore, artifacts: ArtifactSto
         factor settings in both coded and natural units, plus predicted responses."""
         if not responses:
             raise ValidationError("at least one response is required")
-        df = store.get_dataframe(get_current_workspace_id(), handle)
+        df = get_dataframe_for_analysis(store, get_current_workspace_id(), handle)
         _require_columns(df, [r["column"] for r in responses] + factor_names)
         working = _coded_working_frame(df, factor_names)
 

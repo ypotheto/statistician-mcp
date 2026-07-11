@@ -11,6 +11,7 @@ from typing import Any, TypeVar
 from statistician_mcp import __version__
 from statistician_mcp.errors import StatMcpError
 from statistician_mcp.usage import log_usage
+from statistician_mcp.utils.plotting import close_all_open_figures
 from statistician_mcp.workspace import get_current_workspace_id
 
 LOGGER = logging.getLogger(__name__)
@@ -57,9 +58,11 @@ def tool(name: str) -> Callable[[F], F]:
                 if inspect.isawaitable(result):
                     result = await result
             except StatMcpError as exc:
+                close_all_open_figures()
                 log_usage(workspace_id, name, _elapsed_ms(start), ok=False)
                 return error_envelope(exc.code, exc.message, exc.hint)
             except Exception:
+                close_all_open_figures()
                 correlation_id = uuid.uuid4().hex[:12]
                 LOGGER.exception(
                     "unhandled error in tool '%s' (correlation_id=%s)", name, correlation_id

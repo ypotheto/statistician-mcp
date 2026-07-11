@@ -44,3 +44,25 @@ def render_png(fig: Any) -> bytes:
     fig.savefig(buf, format="png", bbox_inches="tight")
     plt.close(fig)
     return buf.getvalue()
+
+
+def close_all_open_figures() -> None:
+    """Safety net for the case where a plotting tool raises between figure
+    creation and `render_png` (which is the only place a figure normally gets
+    closed) -- matplotlib keeps every created figure registered globally until
+    explicitly closed, so an uncaught exception there would otherwise leak
+    memory for the life of the server process. Called from envelope.tool's
+    exception handlers, which run for every tool regardless of whether it plots.
+
+    Using the global `plt.close("all")` (rather than closing one specific figure)
+    is only safe because it can never affect a *different* in-flight request's
+    figure: every tool this server registers is wrapped into an async function
+    by envelope.tool, and FastMCP always awaits async tools directly in the
+    current event loop rather than offloading them to a thread pool (verified
+    against the installed mcp SDK's dispatch code) -- so a tool's synchronous
+    body (which is where all plotting happens; there are no `await` points
+    inside it) runs to completion or raises before any other tool call's code
+    can run at all, on a single worker or many. If that dispatch model ever
+    changes, this function's safety argument needs re-checking.
+    """
+    plt.close("all")

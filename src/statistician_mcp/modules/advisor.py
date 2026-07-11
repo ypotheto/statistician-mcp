@@ -9,7 +9,7 @@ import yaml
 from mcp.server.fastmcp import FastMCP
 
 from statistician_mcp import envelope
-from statistician_mcp.datasets import DatasetStore
+from statistician_mcp.datasets import DatasetStore, get_dataframe_for_analysis
 from statistician_mcp.errors import ValidationError
 from statistician_mcp.workspace import get_current_workspace_id
 
@@ -29,7 +29,7 @@ def register_advisor_tools(mcp: FastMCP, store: DatasetStore) -> None:
         `handle` so the rules can also consider the dataset's column types."""
         profile = None
         if handle is not None:
-            df = store.get_dataframe(get_current_workspace_id(), handle)
+            df = get_dataframe_for_analysis(store, get_current_workspace_id(), handle)
             profile = _profile_for_recommendation(df)
 
         recommendations = _recommend(question.lower(), profile)

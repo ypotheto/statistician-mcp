@@ -8,7 +8,7 @@ from mcp.server.fastmcp import FastMCP
 
 from statistician_mcp import envelope
 from statistician_mcp.artifacts import ArtifactStore
-from statistician_mcp.datasets import DatasetStore
+from statistician_mcp.datasets import DatasetStore, get_dataframe_for_analysis
 from statistician_mcp.errors import ColumnNotFoundError, ValidationError
 from statistician_mcp.stats import capability as stats_capability
 from statistician_mcp.stats import control_charts as cc
@@ -50,7 +50,7 @@ def register_spc_tools(mcp: FastMCP, store: DatasetStore, artifacts: ArtifactSto
         `count_column` + `unit_column`. Limits are computed from the data unless
         `target`/`sigma` are given (historical limits). Nelson/Western-Electric
         rules 1-8 are applied except for ewma/cusum (which use their own limits)."""
-        df = store.get_dataframe(get_current_workspace_id(), handle)
+        df = get_dataframe_for_analysis(store, get_current_workspace_id(), handle)
         chart, secondary_chart, row_index = _build_chart(
             df,
             chart_type,
@@ -109,7 +109,7 @@ def register_spc_tools(mcp: FastMCP, store: DatasetStore, artifacts: ArtifactSto
         limits, DPMO, and process sigma level. Runs a normality check first (with a
         Box-Cox-transformed alternative if it fails) and renders a capability
         histogram with spec/limit lines."""
-        df = store.get_dataframe(get_current_workspace_id(), handle)
+        df = get_dataframe_for_analysis(store, get_current_workspace_id(), handle)
         _require_numeric(df, column)
         try:
             result = stats_capability.process_capability(
@@ -135,7 +135,7 @@ def register_spc_tools(mcp: FastMCP, store: DatasetStore, artifacts: ArtifactSto
         """Apply Nelson/Western-Electric rules to new data against EXISTING
         (historical) control limits, without re-deriving limits from this data.
         Use to check whether a process is still in control relative to a baseline."""
-        df = store.get_dataframe(get_current_workspace_id(), handle)
+        df = get_dataframe_for_analysis(store, get_current_workspace_id(), handle)
         _require_numeric(df, value_column)
         points = df[value_column].to_numpy()
         sigma = (ucl - cl) / 3

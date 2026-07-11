@@ -20,5 +20,10 @@ def settings_with_token(tmp_path: Path) -> Settings:
     return Settings(data_dir=tmp_path / "data", api_token="secret-token")
 
 
+@pytest.fixture
+def settings_with_keys(tmp_path: Path) -> Settings:
+    return Settings(data_dir=tmp_path / "data", auth_mode="keys")
+
+
 def payload(result: CallToolResult) -> dict[str, Any]:
     return json.loads(result.content[0].text)  # type: ignore[union-attr]

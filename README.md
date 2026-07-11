@@ -1,8 +1,60 @@
 # statistician-mcp
-An MCP server providing virtual statistician tools for DOE, SPC, EDA, statistical modeling, and data-driven decision support.
 
-See [planning/statistician_mcp_plan.md](planning/statistician_mcp_plan.md) for the full
-architecture and phase-by-phase implementation plan.
+**A virtual statistician for your AI agent.** An [MCP](https://modelcontextprotocol.io)
+server that gives Claude, ChatGPT, or any MCP-speaking client real statistical
+methods to work with — design of experiments, statistical process control,
+hypothesis testing, regression, measurement systems analysis — instead of
+hoping the model remembers the right formula and doesn't hallucinate a p-value.
+
+MIT licensed. Built on `scipy`, `statsmodels`, and `pyDOE3` — the same
+libraries a human statistician would reach for, just wired up so an LLM can
+call them directly.
+
+## Why this is different from "ask the model to do stats"
+
+- **Real methods, not guesses.** Every tool runs an actual, tested statistical
+  routine (Shapiro-Wilk, Tukey HSD, Gauge R&R variance components, D-optimal
+  and factorial designs, Western Electric/Nelson rules for control charts) —
+  the kind of thing that's easy for an LLM to get subtly wrong if it's doing
+  the arithmetic itself, and easy to get right when it's calling a library
+  built for it.
+- **Every result explains itself.** Tool responses don't just return numbers —
+  they come back with a plain-language `interpretation` field ("this p-value
+  means...", "Cpk of 1.1 means..."), so the agent (and the human reading its
+  output) doesn't have to guess what a statistic means.
+- **A built-in advisor, not just a toolbox.** `recommend_analysis` looks at
+  what you're trying to answer and suggests which test or design actually
+  fits; `explain_concept` gives a plain-English explanation of ~30 core
+  statistical concepts on demand.
+- **Broader than a stats library wrapper.** Most "do some stats" integrations
+  stop at t-tests and correlation. This covers full design-of-experiments
+  (factorial, response surface, optimization), SPC (control charts,
+  capability, stability rules), and MSA (Gauge R&R) — the parts of applied
+  statistics that manufacturing, quality, and experimental-science work
+  actually needs, and that a general-purpose model rarely gets right
+  unprompted.
+- **Plots, not just numbers.** Distribution plots, control charts, response
+  surfaces, and power curves render as real images the agent can hand back to
+  you, not ASCII art.
+- **Works everywhere MCP works.** stdio for Claude Desktop/Claude Code, or
+  streamable HTTP for a hosted deployment any MCP client can point at.
+
+## What's in the box
+
+| Category | Tools |
+|---|---|
+| **Datasets** | load from CSV/URL, list, describe, sample, transform, delete |
+| **EDA** | column summaries, distribution plots, normality tests, outlier detection, correlations, scatter/time-series plots, crosstabs |
+| **Inference & power** | compare means/proportions/variances, compare multiple groups, equivalence testing, confidence intervals, power/sample-size calculations |
+| **Design of experiments** | design factorial/response-surface experiments, evaluate a design, analyze factorial results, analyze response surfaces, optimize a response |
+| **Statistical process control** | control charts (X-bar/R, I-MR, ...), process capability (Cp/Cpk/Pp/Ppk), stability/out-of-control rule checks |
+| **Measurement systems analysis** | Gauge R&R (crossed ANOVA), attribute agreement analysis |
+| **Regression & modeling** | linear/logistic models, model comparison, prediction, distribution fitting |
+| **Advisor** | recommend which analysis fits your question, explain a statistical concept |
+
+39 tools in total. See the module source under
+[`src/statistician_mcp/modules/`](src/statistician_mcp/modules/) for the full
+list and docstrings.
 
 ## Quickstart
 
@@ -28,7 +80,7 @@ Add to your MCP client config (e.g. `claude_desktop_config.json`):
 }
 ```
 
-### Streamable HTTP (ypotheto-core, hosted deployments)
+### Streamable HTTP (hosted deployments)
 
 ```powershell
 .\.venv\Scripts\python.exe -m statistician_mcp --transport http --port 8347
@@ -101,10 +153,10 @@ endpoint/key/secret must be set together:
 
 ```
 STATMCP_SPACES_BUCKET=my-bucket
-STATMCP_SPACES_ENDPOINT=https://sfo3.digitaloceanspaces.com
+STATMCP_SPACES_ENDPOINT=https://nyc3.digitaloceanspaces.com
 STATMCP_SPACES_KEY=...
 STATMCP_SPACES_SECRET=...
-STATMCP_SPACES_REGION=sfo3          # optional, defaults to nyc3
+STATMCP_SPACES_REGION=nyc3          # optional, defaults to nyc3
 STATMCP_SPACES_PREFIX=statistician-mcp   # optional, this is already the default
 ```
 
@@ -138,7 +190,7 @@ Two viable paths on DigitalOcean — pick based on how much ops you want:
   local-dir storage backend and SQLite key store working unchanged, at the
   cost of your own reverse proxy (Caddy/nginx + Let's Encrypt) for TLS and OS
   upkeep. Fine for a private beta; App Platform is the better path once
-  external customers exist.
+  you need to scale beyond one box.
 
 Either way: set `STATMCP_PUBLIC_BASE_URL` to the real public HTTPS URL once
 it's known (artifact links resolve against this — App Platform has no
@@ -147,6 +199,13 @@ after the first deploy, once DO tells you the assigned domain) and smoke-test
 `/healthz` plus an actual tool call against the hosted instance before
 declaring it done.
 
-See [CHANGELOG.md](CHANGELOG.md) for what's been verified against real DO
-infrastructure so far, and [planning/statistician_mcp_plan.md](planning/statistician_mcp_plan.md)
-for the deployment phase's acceptance criteria.
+See [CHANGELOG.md](CHANGELOG.md) for what's been built and verified so far.
+
+## Contributing
+
+Issues and pull requests welcome. Run `ruff check .`, `mypy src`, and `pytest`
+before submitting — CI runs the same three.
+
+## License
+
+[MIT](LICENSE)

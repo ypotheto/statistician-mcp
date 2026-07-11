@@ -1,3 +1,6 @@
+# Internal planning docs -- not for the public repo
+planning/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

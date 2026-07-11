@@ -13,6 +13,7 @@ from statistician_mcp.modules.doe import register_doe_tools
 from statistician_mcp.modules.eda import register_eda_tools
 from statistician_mcp.modules.inference import register_inference_tools
 from statistician_mcp.modules.power import register_power_tools
+from statistician_mcp.modules.spc import register_spc_tools
 from statistician_mcp.storage import LocalDirBackend
 
 
@@ -48,6 +49,7 @@ def create_server(settings: Settings) -> ServerBundle:
     register_inference_tools(mcp, dataset_store, artifact_store)
     register_power_tools(mcp, artifact_store)
     register_doe_tools(mcp, dataset_store, artifact_store)
+    register_spc_tools(mcp, dataset_store, artifact_store)
 
     return ServerBundle(
         mcp=mcp, settings=settings, dataset_store=dataset_store, artifact_store=artifact_store

@@ -44,12 +44,12 @@ def main() -> None:
     settings.data_dir = args.data_dir
     settings.data_dir.mkdir(parents=True, exist_ok=True)
 
-    mcp = create_server(settings)
+    bundle = create_server(settings)
 
     if args.transport == "stdio":
-        asyncio.run(mcp.run_stdio_async())
+        asyncio.run(bundle.mcp.run_stdio_async())
     else:
-        app = create_app(mcp)
+        app = create_app(bundle)
         uvicorn.run(app, host="0.0.0.0", port=settings.port)
 
 

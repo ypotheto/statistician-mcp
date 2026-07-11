@@ -1,12 +1,32 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from mcp.server.fastmcp import FastMCP
 
-from statistician_mcp import __version__
+from statistician_mcp import __version__, usage
+from statistician_mcp.artifacts import ArtifactStore
 from statistician_mcp.config import Settings
+from statistician_mcp.datasets import DatasetStore
+from statistician_mcp.modules.datasets_tools import register_dataset_tools
+from statistician_mcp.storage import LocalDirBackend
 
 
-def create_server(settings: Settings) -> FastMCP:
+@dataclass
+class ServerBundle:
+    mcp: FastMCP
+    settings: Settings
+    dataset_store: DatasetStore
+    artifact_store: ArtifactStore
+
+
+def create_server(settings: Settings) -> ServerBundle:
+    usage.configure(settings.data_dir)
+    backend = LocalDirBackend(settings.data_dir / "storage")
+    dataset_store = DatasetStore(backend)
+    base_url = settings.public_base_url or f"http://localhost:{settings.port}"
+    artifact_store = ArtifactStore(backend, base_url)
+
     mcp = FastMCP(
         "statistician",
         port=settings.port,
@@ -19,4 +39,8 @@ def create_server(settings: Settings) -> FastMCP:
         """Health check tool: returns server name and version. Use to verify connectivity."""
         return {"server": "statistician", "version": __version__}
 
-    return mcp
+    register_dataset_tools(mcp, dataset_store)
+
+    return ServerBundle(
+        mcp=mcp, settings=settings, dataset_store=dataset_store, artifact_store=artifact_store
+    )

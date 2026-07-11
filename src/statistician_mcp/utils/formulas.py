@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import re
 
 import numpy as np
 import pandas as pd
@@ -67,3 +68,58 @@ def _validate(node: ast.AST, columns: set[str]) -> None:
             raise FormulaError("only numeric literals are allowed")
     else:
         raise FormulaError(f"expression contains a disallowed construct: {type(node).__name__}")
+
+
+_MODEL_FORMULA_FORBIDDEN_CHARS = set("()[]{}'\"\\;#@$%^&|<>=!,.")
+_MODEL_FORMULA_TOKEN_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def validate_model_formula(formula: str, columns: set[str]) -> tuple[str, list[str]]:
+    """Validate a restricted patsy-style model formula (`y ~ A + B + A:B`) *before*
+    it is ever handed to patsy/statsmodels.
+
+    patsy evaluates each formula term as a Python expression via `eval` — a formula
+    like `y ~ __import__('os').system(...)` executes arbitrary code the moment
+    `patsy.dmatrices`/`smf.ols` parses it. This is not a hypothetical: verified
+    directly against the installed patsy version during development. So the
+    grammar here is a hard allowlist of characters (identifiers, digits, `~ + - : *
+    whitespace`) applied BEFORE any patsy call — anything resembling a function
+    call, attribute access, subscript, string, or dunder is rejected outright,
+    rather than trying to enumerate unsafe constructs.
+
+    Returns `(response_column, [rhs_term, ...])` — the original `formula` string
+    (unchanged) is what should actually be passed to patsy/statsmodels once this
+    validation passes.
+    """
+    if "~" not in formula:
+        raise FormulaError("formula must contain '~', e.g. 'y ~ A + B'")
+    forbidden = _MODEL_FORMULA_FORBIDDEN_CHARS & set(formula)
+    if forbidden:
+        raise FormulaError(
+            f"formula may only contain column names, ~, +, -, :, *, and whitespace "
+            f"(found disallowed character(s): {''.join(sorted(forbidden))})"
+        )
+
+    lhs, rhs = formula.split("~", 1)
+    lhs = lhs.strip()
+    if not lhs:
+        raise FormulaError("formula is missing a response (left of '~')")
+    if lhs not in columns:
+        raise FormulaError(f"response '{lhs}' is not a column in this dataset")
+
+    terms: list[str] = []
+    for raw_term in re.split(r"[+\-]", rhs):
+        term = raw_term.strip()
+        if not term or term in ("1", "0"):
+            continue
+        factors = [f.strip() for f in term.replace("*", ":").split(":") if f.strip()]
+        for factor in factors:
+            if not _MODEL_FORMULA_TOKEN_RE.fullmatch(factor):
+                raise FormulaError(f"invalid term '{factor}' in formula")
+            if factor not in columns:
+                raise FormulaError(f"unknown column '{factor}' in formula term '{term}'")
+        terms.append(term)
+
+    if not terms:
+        raise FormulaError("formula has no right-hand-side terms")
+    return lhs, terms

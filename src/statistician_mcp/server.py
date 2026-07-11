@@ -9,6 +9,9 @@ from statistician_mcp.artifacts import ArtifactStore
 from statistician_mcp.config import Settings
 from statistician_mcp.datasets import DatasetStore
 from statistician_mcp.modules.datasets_tools import register_dataset_tools
+from statistician_mcp.modules.eda import register_eda_tools
+from statistician_mcp.modules.inference import register_inference_tools
+from statistician_mcp.modules.power import register_power_tools
 from statistician_mcp.storage import LocalDirBackend
 
 
@@ -40,6 +43,9 @@ def create_server(settings: Settings) -> ServerBundle:
         return {"server": "statistician", "version": __version__}
 
     register_dataset_tools(mcp, dataset_store)
+    register_eda_tools(mcp, dataset_store, artifact_store)
+    register_inference_tools(mcp, dataset_store, artifact_store)
+    register_power_tools(mcp, artifact_store)
 
     return ServerBundle(
         mcp=mcp, settings=settings, dataset_store=dataset_store, artifact_store=artifact_store

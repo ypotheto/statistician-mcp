@@ -1,20 +1,15 @@
 from __future__ import annotations
 
 import json
-from typing import Any
 
 import pytest
 from mcp.shared.memory import create_connected_server_and_client_session
-from mcp.types import CallToolResult
 
 from statistician_mcp.config import Settings
 from statistician_mcp.server import create_server
+from tests.conftest import payload as _payload
 
 CSV_TEXT = "a,b\n1,4\n2,5\n3,6\n"
-
-
-def _payload(result: CallToolResult) -> dict[str, Any]:
-    return json.loads(result.content[0].text)  # type: ignore[union-attr]
 
 
 @pytest.mark.asyncio

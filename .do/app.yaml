@@ -32,10 +32,16 @@ services:
       failure_threshold: 3
     envs:
       - key: STATMCP_AUTH_MODE
-        value: "keys"
+        value: "oauth"
         scope: RUN_TIME
       - key: STATMCP_PUBLIC_BASE_URL
-        value: "REPLACE_AFTER_FIRST_DEPLOY"
+        value: "https://statistician-mcp-zg8sh.ondigitalocean.app"
+        scope: RUN_TIME
+      - key: STATMCP_OAUTH_ISSUER
+        value: "https://ypotheto-dev.us.kinde.com"
+        scope: RUN_TIME
+      - key: STATMCP_OAUTH_AUDIENCE
+        value: "https://statistician-mcp-zg8sh.ondigitalocean.app/mcp"
         scope: RUN_TIME
       - key: STATMCP_DATABASE_URL
         value: "REPLACE_ME"

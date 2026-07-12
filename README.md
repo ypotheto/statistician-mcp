@@ -155,6 +155,33 @@ Three modes, set via `STATMCP_AUTH_MODE` (default `token`):
 `/artifacts/*` also accepts the token as a `?t=` query parameter (browsers
 can't set an `Authorization` header on a plain link).
 
+### Connecting from Claude (`oauth` mode)
+
+Claude Desktop / claude.ai support custom MCP connectors with OAuth:
+
+1. **Settings → Connectors → Add custom connector**
+2. **Remote MCP server URL**: your deployment's MCP endpoint, e.g.
+   `https://your-deployment.example.com/mcp`
+3. **Advanced settings → OAuth Client ID / OAuth Client Secret**: from
+   whatever OAuth application you registered in your identity provider (a
+   "back-end web" / "regular web app" type, *not* machine-to-machine — this
+   flow needs a real user login/consent screen and an individual identity,
+   which M2M apps don't have) for this MCP server, with the redirect URI set
+   to `https://claude.ai/api/mcp/auth_callback`
+4. Click **Add**, then enable the connector for a conversation via the **+**
+   button, and Claude will walk you through logging in.
+
+This only works if the server operator has set `STATMCP_AUTH_MODE=oauth` and
+configured an identity provider (see above) — the `token`/`keys` modes don't
+speak OAuth at all, and need a bearer token supplied directly instead (via a
+connector's plain API-key/header auth option, where the client supports it).
+
+Other MCP clients (ChatGPT, etc.) that support custom connectors follow a
+similar shape — point them at the same `/mcp` URL and either the OAuth flow
+above or a bearer token, depending on what the server is configured for and
+what the client supports. This section will grow as more of them get verified
+against this server.
+
 ## Docker
 
 ```bash

@@ -30,6 +30,16 @@ class OAuthVerifier:
     elsewhere. Per the MCP authorization spec, audience validation (`aud` must
     match this server) is what stops a token minted for a *different*
     Kinde-protected API from being replayed here.
+
+    STOPGAP: Kinde only scopes a token's `aud` claim via its own proprietary
+    `audience` authorization-request parameter, not RFC 8707's `resource`
+    parameter that MCP clients (Claude) are required to send -- so a token
+    from that flow has no `aud` claim at all. Until Kinde adds `resource`
+    support (or a workaround surfaces), a missing `aud` is accepted; a
+    *present-but-wrong* `aud` is still rejected, so this doesn't fully drop
+    audience binding, just relaxes it to "not provably for someone else"
+    rather than "provably for us." Tighten this back to a hard requirement
+    once Kinde honors `resource`.
     """
 
     def __init__(
@@ -62,11 +72,18 @@ class OAuthVerifier:
                 signing_key.key,
                 algorithms=["RS256"],
                 issuer=self._issuer,
-                audience=self._audience,
+                options={"require": ["exp"], "verify_aud": False},
             )
         except jwt.PyJWTError as exc:
             self._log_rejection(raw_token, str(exc))
             return None
+
+        aud = claims.get("aud")
+        if aud is not None:
+            aud_values = aud if isinstance(aud, list) else [aud]
+            if self._audience not in aud_values:
+                self._log_rejection(raw_token, "aud claim present but does not match")
+                return None
 
         if self._required_permission not in claims.get("permissions", []):
             self._log_rejection(

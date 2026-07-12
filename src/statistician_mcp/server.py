@@ -71,7 +71,7 @@ def _build_transport_security(settings: Settings) -> TransportSecuritySettings:
 
 
 def create_server(settings: Settings) -> ServerBundle:
-    usage.configure(settings.data_dir)
+    usage.configure(settings)
     backend = _build_storage_backend(settings)
     dataset_store = DatasetStore(backend)
     base_url = settings.public_base_url or f"http://localhost:{settings.port}"

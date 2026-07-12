@@ -3,6 +3,22 @@
 All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); versioning is semver.
 
+## Unreleased — durable usage logging
+
+- **Usage events land in Postgres when `STATMCP_DATABASE_URL` is set** (a
+  `usage_events` table in the DSN's default schema, created on startup),
+  instead of a JSONL file on local disk that App Platform's ephemeral disk
+  wipes on every redeploy. Local/dev without a DSN keeps the JSONL file.
+  Spaces was considered and rejected: S3-style objects can't be appended to,
+  so per-event object writes or whole-file rewrites both fit badly.
+- Events flow through a bounded queue drained by a daemon thread:
+  `log_usage` is called inside `envelope.tool`'s async wrapper (on the event
+  loop), so the INSERT's network round trip must not happen inline — and a
+  failed or dropped usage write only ever costs the event, never the tool
+  call it was recording (pinned by a test that drops the table mid-flight).
+- The session-scoped Docker Postgres fixture moved from `test_apikeys.py` to
+  `conftest.py`, shared by the new `tests/test_usage.py`.
+
 ## Unreleased — OAuth resource server (Kinde)
 
 - **`STATMCP_AUTH_MODE=oauth`**: a third auth mode alongside `token`/`keys`, for

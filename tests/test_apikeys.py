@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import shutil
-import subprocess
-import time
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -11,63 +8,8 @@ import pytest
 
 from statistician_mcp.apikeys import KeyStore, PostgresKeyStore, SqliteKeyStore
 
-_DOCKER_AVAILABLE = shutil.which("docker") is not None
-_CONTAINER_NAME = "statmcp-test-postgres"
-
-
-def _wait_for_postgres(url: str, timeout: float = 30.0) -> None:
-    deadline = time.monotonic() + timeout
-    last_error: Exception | None = None
-    while time.monotonic() < deadline:
-        try:
-            with psycopg.connect(url, connect_timeout=2) as conn:
-                conn.execute("SELECT 1")
-            return
-        except Exception as exc:  # noqa: BLE001 -- retry on any connect failure
-            last_error = exc
-            time.sleep(0.5)
-    raise RuntimeError(f"Postgres did not become ready in time: {last_error}")
-
-
-@pytest.fixture(scope="session")
-def postgres_url() -> Iterator[str]:
-    """Spins up a throwaway `postgres:16-alpine` container for the test session --
-    real Postgres, not a mock, since SQLite/Postgres SQL-dialect differences
-    (placeholder syntax, boolean handling) are exactly the kind of thing a mock
-    would paper over."""
-    if not _DOCKER_AVAILABLE:
-        pytest.skip("docker is not available")
-
-    subprocess.run(["docker", "rm", "-f", _CONTAINER_NAME], capture_output=True, check=False)
-    subprocess.run(
-        [
-            "docker",
-            "run",
-            "-d",
-            "--name",
-            _CONTAINER_NAME,
-            "-e",
-            "POSTGRES_PASSWORD=test",
-            "-p",
-            "127.0.0.1::5432",
-            "postgres:16-alpine",
-        ],
-        check=True,
-        capture_output=True,
-    )
-    try:
-        port_output = subprocess.run(
-            ["docker", "port", _CONTAINER_NAME, "5432"],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-        port = port_output.rsplit(":", 1)[-1]
-        url = f"postgresql://postgres:test@127.0.0.1:{port}/postgres"
-        _wait_for_postgres(url)
-        yield url
-    finally:
-        subprocess.run(["docker", "rm", "-f", _CONTAINER_NAME], capture_output=True, check=False)
+# The session-scoped, Docker-backed `postgres_url` fixture lives in conftest.py
+# (shared with test_usage.py).
 
 
 @pytest.fixture(params=["sqlite", "postgres"])

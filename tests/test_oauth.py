@@ -112,11 +112,32 @@ def test_missing_aud_claim_accepted_as_stopgap(
 ) -> None:
     """Kinde doesn't honor RFC 8707's `resource` param (only its own
     `audience` param), so a token minted through the Claude/MCP flow has no
-    `aud` claim at all -- see the STOPGAP note on OAuthVerifier. A missing
-    `aud` must still verify; test_wrong_audience_rejected above covers that a
+    usable `aud` -- see the STOPGAP note on OAuthVerifier. A missing `aud`
+    must still verify; test_wrong_audience_rejected above covers that a
     *present-but-wrong* one still doesn't."""
     private_key, _ = keypair
     token = _make_token(private_key, audience=None)
+    assert verifier.verify(token) == resolve_workspace_id("kp_abc123")
+
+
+def test_empty_aud_list_accepted_as_stopgap(
+    verifier: OAuthVerifier, keypair: tuple[RSAPrivateKey, Any]
+) -> None:
+    """The shape Kinde actually issues (observed live): aud=[] -- an empty
+    array, not an omitted claim. Must be treated the same as missing."""
+    private_key, _ = keypair
+    now = time.time()
+    token = jwt.encode(
+        {
+            "iss": _ISSUER,
+            "aud": [],
+            "sub": "kp_abc123",
+            "exp": now + 300,
+            "permissions": [_PERMISSION],
+        },
+        private_key,
+        algorithm="RS256",
+    )
     assert verifier.verify(token) == resolve_workspace_id("kp_abc123")
 
 

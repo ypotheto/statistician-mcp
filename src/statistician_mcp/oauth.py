@@ -78,8 +78,12 @@ class OAuthVerifier:
             self._log_rejection(raw_token, str(exc))
             return None
 
+        # Truthiness, not an is-None check: Kinde was observed issuing aud=[]
+        # (an empty array) rather than omitting the claim, and an empty aud
+        # carries the same meaning as an absent one (PyJWT's own _validate_aud
+        # treats them identically).
         aud = claims.get("aud")
-        if aud is not None:
+        if aud:
             aud_values = aud if isinstance(aud, list) else [aud]
             if self._audience not in aud_values:
                 self._log_rejection(raw_token, "aud claim present but does not match")

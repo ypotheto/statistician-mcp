@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from typing import Protocol
+import logging
+from typing import Any, Protocol
 
 import jwt
 
 from statistician_mcp.workspace import resolve_workspace_id
+
+logger = logging.getLogger(__name__)
 
 
 class SigningKeyResolver(Protocol):
@@ -49,7 +52,9 @@ class OAuthVerifier:
         permissioned token, or None for any failure (bad/unknown-key signature,
         wrong issuer/audience, expired, missing the required permission,
         missing `sub`). Callers don't need to distinguish *why* it failed --
-        same as `KeyStore.verify_key`, an invalid credential is just None."""
+        same as `KeyStore.verify_key`, an invalid credential is just None.
+        Every rejection is logged with the reason and the token's *claims*
+        (never the raw token itself) to make this diagnosable in production."""
         try:
             signing_key = self._jwk_client.get_signing_key_from_jwt(raw_token)
             claims = jwt.decode(
@@ -59,13 +64,40 @@ class OAuthVerifier:
                 issuer=self._issuer,
                 audience=self._audience,
             )
-        except jwt.PyJWTError:
+        except jwt.PyJWTError as exc:
+            self._log_rejection(raw_token, str(exc))
             return None
 
         if self._required_permission not in claims.get("permissions", []):
+            self._log_rejection(
+                raw_token,
+                f"missing required permission {self._required_permission!r}",
+            )
             return None
 
         sub = claims.get("sub")
         if not sub:
+            self._log_rejection(raw_token, "missing 'sub' claim")
             return None
         return resolve_workspace_id(sub)
+
+    def _log_rejection(self, raw_token: str, reason: str) -> None:
+        # Decoded *without* signature verification purely to log what the
+        # token actually claims -- never used for any authorization decision.
+        unverified: dict[str, Any]
+        try:
+            unverified = jwt.decode(raw_token, options={"verify_signature": False})
+        except jwt.PyJWTError:
+            unverified = {}
+        logger.warning(
+            "oauth token rejected: %s (expected issuer=%r audience=%r "
+            "permission=%r; token had iss=%r aud=%r sub=%r permissions=%r)",
+            reason,
+            self._issuer,
+            self._audience,
+            self._required_permission,
+            unverified.get("iss"),
+            unverified.get("aud"),
+            unverified.get("sub"),
+            unverified.get("permissions"),
+        )

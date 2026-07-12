@@ -314,6 +314,45 @@ async def test_oauth_mode_accepts_a_valid_permissioned_token(
 
 
 @pytest.mark.asyncio
+async def test_mcp_accepts_public_hostname_when_public_base_url_set(
+    settings_with_keys: Settings,
+) -> None:
+    """Reproduces the production 421: FastMCP's DNS-rebinding protection
+    defaults to a localhost-only Host allowlist, rejecting every request that
+    carries the deployment's real public hostname. With public_base_url set,
+    that hostname must be allowed through to the MCP handshake."""
+    settings_with_keys.public_base_url = "https://statistician.example.com"
+    raw_key = apikeys.build_key_store(settings_with_keys).issue_key(workspace_id="ws_acme")
+    bundle = create_server(settings_with_keys)
+    app = create_app(bundle)
+
+    async with bundle.mcp.session_manager.run():
+        transport = ASGITransport(app=app)
+        async with AsyncClient(
+            transport=transport, base_url="https://statistician.example.com"
+        ) as client:
+            response = await client.post(
+                "/mcp",
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2025-03-26",
+                        "capabilities": {},
+                        "clientInfo": {"name": "test", "version": "0.0"},
+                    },
+                },
+                headers={
+                    "Authorization": f"Bearer {raw_key}",
+                    "Accept": "application/json, text/event-stream",
+                },
+            )
+
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_oauth_mode_rejects_token_missing_permission(
     settings_with_oauth: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:

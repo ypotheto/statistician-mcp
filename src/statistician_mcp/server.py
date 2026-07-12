@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from statistician_mcp import __version__, usage
 from statistician_mcp.artifacts import ArtifactStore
@@ -46,6 +48,28 @@ def _build_storage_backend(settings: Settings) -> StorageBackend:
     )
 
 
+def _build_transport_security(settings: Settings) -> TransportSecuritySettings:
+    """FastMCP constructed without explicit transport security auto-enables
+    DNS-rebinding protection with a localhost-only Host allowlist -- correct
+    for the local-dev threat model it targets, but it 421s every request that
+    carries a real public hostname, so a hosted deployment must allowlist its
+    own public host explicitly. Derived from STATMCP_PUBLIC_BASE_URL (which a
+    hosted deployment must set anyway, for artifact URLs); localhost stays
+    allowed so local runs and tests behave as before."""
+    allowed_hosts = ["localhost", "localhost:*", "127.0.0.1", "127.0.0.1:*"]
+    allowed_origins = ["http://localhost:*", "http://127.0.0.1:*"]
+    if settings.public_base_url:
+        parsed = urlparse(settings.public_base_url)
+        if parsed.netloc:
+            allowed_hosts.append(parsed.netloc)
+            allowed_origins.append(f"{parsed.scheme}://{parsed.netloc}")
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=allowed_hosts,
+        allowed_origins=allowed_origins,
+    )
+
+
 def create_server(settings: Settings) -> ServerBundle:
     usage.configure(settings.data_dir)
     backend = _build_storage_backend(settings)
@@ -58,6 +82,7 @@ def create_server(settings: Settings) -> ServerBundle:
         port=settings.port,
         json_response=True,
         stateless_http=True,
+        transport_security=_build_transport_security(settings),
     )
 
     @mcp.tool()
